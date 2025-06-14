@@ -28,14 +28,13 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.sawwere.yoloapp.camera.presentation.CameraScreen
 import com.sawwere.yoloapp.camera.presentation.CameraScreenViewModel
-import com.sawwere.yoloapp.core.component.VibrationComponent
+import com.sawwere.yoloapp.core.system.VibrationComponent
 import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.image.DrawImages
 import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
@@ -57,11 +56,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     private var segmentedBitmap: Bitmap? by mutableStateOf(null)
     private var originalBitmap: Bitmap? by mutableStateOf(null)
 
-    // UI states
-
-    private var zoomProgress by mutableFloatStateOf(0f)
-    private var minZoomRatio by mutableFloatStateOf(1f)
-    private var maxZoomRatio by mutableFloatStateOf(1f)
 
     private lateinit var vibrator : Vibrator
 
@@ -104,16 +98,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                 CameraScreen(
                     viewModel = this.viewModel,
                     segmentedBitmap = segmentedBitmap,
-                    zoomProgress = zoomProgress,
-                    minZoomRatio = minZoomRatio,
-                    maxZoomRatio = maxZoomRatio,
-                    onZoomChanged = { newProgress ->
-                        zoomProgress = newProgress
-                        updateCameraZoom()
-                    },
-                    onZoomGesture = { scaleFactor ->
-                        handlePinchZoom(scaleFactor)
-                    },
                     onCaptureClick = {
                         saveCombinedImage()
                         vibrationComponent.triggerHapticFeedback()
@@ -190,48 +174,11 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                     preview,
                     imageAnalyzer
                 )
-                setupZoomState()
+                viewModel.setupZoomState(camera!!)
             } catch (exc: Exception) {
                 Log.e("CameraX", "Use case binding failed", exc)
             }
         }, ContextCompat.getMainExecutor(this))
-    }
-
-    private fun setupZoomState() {
-        camera?.let { cam ->
-            val zoomState = cam.cameraInfo.zoomState.value
-            zoomState?.let {
-                minZoomRatio = it.minZoomRatio
-                maxZoomRatio = it.maxZoomRatio
-                zoomProgress = calculateZoomProgress(it.zoomRatio)
-            }
-        }
-    }
-
-    private fun calculateZoomProgress(zoomRatio: Float): Float {
-        return ((zoomRatio - minZoomRatio) / (maxZoomRatio - minZoomRatio)) * 10f
-    }
-
-    private fun updateCameraZoom() {
-        camera?.let { cam ->
-            val newZoomRatio = minZoomRatio + (zoomProgress / 10f) * (maxZoomRatio - minZoomRatio)
-            cam.cameraControl.setZoomRatio(newZoomRatio)
-        }
-    }
-
-    private fun handlePinchZoom(scaleFactor: Float) {
-        camera?.let { cam ->
-            val zoomState = cam.cameraInfo.zoomState.value ?: return
-            val currentZoom = zoomState.zoomRatio
-            val newZoom = currentZoom * scaleFactor
-
-            // Ограничиваем зум минимальным/максимальным значением
-            val clampedZoom = newZoom.coerceIn(minZoomRatio, maxZoomRatio)
-
-            // Обновляем состояние зума
-            cam.cameraControl.setZoomRatio(clampedZoom)
-            zoomProgress = calculateZoomProgress(clampedZoom)
-        }
     }
 
     private fun saveCombinedImage() {

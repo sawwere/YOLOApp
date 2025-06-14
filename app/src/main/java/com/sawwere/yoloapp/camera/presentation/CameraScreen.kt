@@ -41,18 +41,15 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sawwere.yoloapp.MainActivity
 import com.sawwere.yoloapp.R
-import com.sawwere.yoloapp.core.detection.DetectionComponent
 
 
 @Composable
 fun CameraScreen(
     viewModel: CameraScreenViewModel,
     segmentedBitmap: Bitmap?,
-    zoomProgress: Float,
-    minZoomRatio: Float,
-    maxZoomRatio: Float,
-    onZoomChanged: (Float) -> Unit,
-    onZoomGesture: (Float) -> Unit,
+//    zoomProgress: Float,
+//    onZoomChanged: (Float) -> Unit,
+//    onZoomGesture: (Float) -> Unit,
     onCaptureClick: () -> Unit
 ) {
     val context = LocalContext.current
@@ -60,6 +57,7 @@ fun CameraScreen(
     val preProcessTime = viewModel.preProcessTime.collectAsState()
     val inferenceTime = viewModel.inferenceTime.collectAsState()
     val postProcessTime= viewModel.postProcessTime.collectAsState()
+    val zoomProgress = viewModel.zoomProgress.collectAsState()
 
     Column(
         modifier = Modifier
@@ -74,7 +72,7 @@ fun CameraScreen(
                 .padding(16.dp)
                 .pointerInput(Unit) {
                     detectTransformGestures { _, _, zoom, _ ->
-                        onZoomGesture(zoom)
+                        viewModel.handlePinchZoom(zoom)
                     }
                 },
             contentAlignment = Alignment.Center
@@ -117,8 +115,10 @@ fun CameraScreen(
         )
 
         Slider(
-            value = zoomProgress,
-            onValueChange = onZoomChanged,
+            value = zoomProgress.value,
+            onValueChange = { newProgress ->
+                        viewModel.updateCameraZoom(newProgress)
+                    },
             valueRange = 0f..10f,
             steps = 9,
             modifier = Modifier
