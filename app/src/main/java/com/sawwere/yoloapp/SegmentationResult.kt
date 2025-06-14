@@ -1,4 +1,4 @@
-package com.sawwere.yolov11app
+package com.sawwere.yoloapp
 
 data class SegmentationResult(
     val box: Output0,

@@ -1,4 +1,4 @@
-package com.sawwere.yolov11app.ui.theme
+package com.sawwere.yoloapp.ui.theme
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -33,7 +33,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun YOLOv11AppTheme(
+fun YOLOAppTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,

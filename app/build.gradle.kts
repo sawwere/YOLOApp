@@ -8,11 +8,11 @@ plugins {
 }
 
 android {
-    namespace = "com.sawwere.yolov11app"
+    namespace = "com.sawwere.yoloapp"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.sawwere.yolov11app"
+        applicationId = "com.sawwere.yoloapp"
         minSdk = 28
         targetSdk = 35
         versionCode = 1

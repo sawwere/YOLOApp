@@ -1,4 +1,4 @@
-package com.sawwere.yolov11app
+package com.sawwere.yoloapp
 
 import android.content.Context
 import org.tensorflow.lite.support.metadata.MetadataExtractor

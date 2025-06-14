@@ -1,4 +1,4 @@
-package com.sawwere.yolov11app
+package com.sawwere.yoloapp
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import androidx.core.content.ContextCompat
+import com.sawwere.yoloapp.R
 
 class DrawImages(private val context: Context) {
 

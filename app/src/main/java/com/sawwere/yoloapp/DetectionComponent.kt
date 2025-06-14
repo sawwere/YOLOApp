@@ -1,12 +1,11 @@
-package com.sawwere.yolov11app
+package com.sawwere.yoloapp
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
-import com.sawwere.yolov11app.MetaData.extractNamesFromLabelFile
-import com.sawwere.yolov11app.MetaData.extractNamesFromMetadata
+import com.sawwere.yoloapp.MetaData.extractNamesFromMetadata
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
@@ -16,7 +15,7 @@ import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
 import java.nio.ByteBuffer
 
-class InstanceSegmentation(
+class DetectionComponent(
     context: Context,
     modelPath: String,
     labelPath: String?,
@@ -47,14 +46,14 @@ class InstanceSegmentation(
         interpreter = Interpreter(model, options)
 
         labels.addAll(extractNamesFromMetadata(model))
-        if (labels.isEmpty()) {
-            if (labelPath == null) {
-                message("Model not contains metadata, provide LABELS_PATH in Constants.kt")
-                labels.addAll(MetaData.TEMP_CLASSES)
-            } else {
-                labels.addAll(extractNamesFromLabelFile(context, labelPath))
-            }
-        }
+//        if (labels.isEmpty()) {
+//            if (labelPath == null) {
+//                message("Model not contains metadata, provide LABELS_PATH in Constants.kt")
+//                labels.addAll(MetaData.TEMP_CLASSES)
+//            } else {
+//                labels.addAll(extractNamesFromLabelFile(context, labelPath))
+//            }
+//        }
 
         val inputShape = interpreter.getInputTensor(0)?.shape()
         val outputShape0 = interpreter.getOutputTensor(0)?.shape()
@@ -71,8 +70,6 @@ class InstanceSegmentation(
             DataType.UINT8 -> Log.d("Model", "Using UINT8 quantized output")
             else -> Log.e("Model", "Unsupported output type: $inputType")
         }
-
-        //val outputShape1 = interpreter.getOutputTensor(1)?.shape()
 
         if (inputShape != null) {
             tensorWidth = inputShape[1]
@@ -185,24 +182,6 @@ class InstanceSegmentation(
             results = segmentationResults
         )
     }
-
-//    private fun processOutput1(output: Array<Array<FloatArray>>): List<Detection> {
-//        val detections = mutableListOf<Detection>()
-//        val numBoxes = 8400
-//
-//        for (i in 0 until numBoxes) {
-//            val confidence = output[0][4][i]  // confidence на позиции 4
-//            if (confidence < CONFIDENCE_THRESHOLD) continue
-//
-//            val x = output[0][0][i]
-//            val y = output[0][1][i]
-//            val width = output[0][2][i]
-//            val height = output[0][3][i]
-//            detections.add(Detection(x, y, width, height, confidence))
-//        }
-//        return detections
-//    }
-
 
     private fun processOutput(
         output: Array<Array<FloatArray>>,

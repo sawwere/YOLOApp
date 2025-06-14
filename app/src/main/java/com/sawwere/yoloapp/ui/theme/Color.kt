@@ -1,4 +1,4 @@
-package com.sawwere.yolov11app.ui.theme
+package com.sawwere.yoloapp.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

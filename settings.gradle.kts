@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "YOLOv11 Instance Segmentation"
+rootProject.name = "YOLO Instance Segmentation"
 include(":app")

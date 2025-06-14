@@ -1,4 +1,4 @@
-package com.sawwere.yolov11app.camera.presentation
+package com.sawwere.yoloapp.camera.presentation
 
 import android.graphics.Bitmap
 import androidx.camera.view.PreviewView
@@ -33,11 +33,13 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.sawwere.yolov11app.MainActivity
+import com.sawwere.yoloapp.MainActivity
+import com.sawwere.yoloapp.R
 
 
 @Composable
@@ -157,15 +159,24 @@ fun SpeedInfoPanel(
             .padding(16.dp)
     ) {
         Text(
-            text = "Speed (in milliseconds)",
+            text = stringResource(R.string.speed_info),
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp,
             color = Color.White
         )
 
-        SpeedInfoRow(label = "Preprocess: ", value = preProcessTime)
-        SpeedInfoRow(label = "Inference: ", value = inferenceTime)
-        SpeedInfoRow(label = "Postprocess: ", value = postProcessTime)
+        SpeedInfoRow(
+            label = stringResource(R.string.preprocess_label),
+            value = preProcessTime
+        )
+        SpeedInfoRow(
+            label = stringResource(R.string.inference_label),
+            value = inferenceTime
+        )
+        SpeedInfoRow(
+            label = stringResource(R.string.postprocess_label),
+            value = postProcessTime
+        )
     }
 }
 

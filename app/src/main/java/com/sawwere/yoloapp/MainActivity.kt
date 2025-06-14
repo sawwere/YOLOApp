@@ -1,4 +1,4 @@
-package com.sawwere.yolov11app
+package com.sawwere.yoloapp
 
 import android.Manifest
 import android.content.ContentValues
@@ -33,8 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.applyCanvas
 import androidx.lifecycle.lifecycleScope
-import com.sawwere.yolov11app.camera.presentation.CameraScreen
-import com.sawwere.yolov11app.ui.theme.YOLOv11AppTheme
+import com.sawwere.yoloapp.camera.presentation.CameraScreen
+import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
@@ -42,9 +42,9 @@ import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
-class MainActivity : ComponentActivity(), InstanceSegmentation.InstanceSegmentationListener {
+class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentationListener {
 
-    private lateinit var instanceSegmentation: InstanceSegmentation
+    private lateinit var detectionComponent: DetectionComponent
     private lateinit var drawImages: DrawImages
     private lateinit var cameraExecutor: ExecutorService
 
@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity(), InstanceSegmentation.InstanceSegmentat
         drawImages = DrawImages(applicationContext)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        instanceSegmentation = InstanceSegmentation(
+        detectionComponent = DetectionComponent(
             context = applicationContext,
             //modelPath = "yolo11n-seg_float16.tflite",
             modelPath = "yolov8s_float16.tflite",
@@ -80,7 +80,7 @@ class MainActivity : ComponentActivity(), InstanceSegmentation.InstanceSegmentat
         )
 
         setContent {
-            YOLOv11AppTheme {
+            YOLOAppTheme {
                 CameraScreen(
                     preProcessTime = preProcessTime,
                     inferenceTime = inferenceTime,
@@ -217,7 +217,7 @@ class MainActivity : ComponentActivity(), InstanceSegmentation.InstanceSegmentat
 
     private fun saveCombinedImage() {
         val original = originalBitmap ?: run {
-            Toast.makeText(this, "No image to save", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.no_image), Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -243,7 +243,7 @@ class MainActivity : ComponentActivity(), InstanceSegmentation.InstanceSegmentat
                 runOnUiThread {
                     Toast.makeText(
                         this@MainActivity,
-                        "Error saving image: ${e.message}",
+                        getString(R.string.error_saving, e.message ?: "Unknown error"),
                         Toast.LENGTH_SHORT
                     ).show()
                 }
@@ -265,11 +265,11 @@ class MainActivity : ComponentActivity(), InstanceSegmentation.InstanceSegmentat
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.Images.Media.IS_PENDING, 1)
-                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/YOLOv11App")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/YOLOApp")
             } else {
                 @Suppress("DEPRECATION")
                 val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                val file = File(directory, "/YOLOv11App")
+                val file = File(directory, "/YOLOApp")
                 if (!file.exists()) file.mkdirs()
                 put(MediaStore.Images.Media.DATA, file.absolutePath + "/combined_image_${System.currentTimeMillis()}.jpg")
             }
@@ -292,7 +292,7 @@ class MainActivity : ComponentActivity(), InstanceSegmentation.InstanceSegmentat
             runOnUiThread {
                 Toast.makeText(
                     this@MainActivity,
-                    "Image saved to Pictures/YOLOv11App",
+                    getString(R.string.image_saved),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -339,7 +339,7 @@ class MainActivity : ComponentActivity(), InstanceSegmentation.InstanceSegmentat
 
     override fun onDetect(
         interfaceTime: Long,
-        results: List<InstanceSegmentation.Detection>,
+        results: List<DetectionComponent.Detection>,
         preProcessTime: Long,
         postProcessTime: Long
     ) {
@@ -373,7 +373,7 @@ class MainActivity : ComponentActivity(), InstanceSegmentation.InstanceSegmentat
 
     override fun onDestroy() {
         super.onDestroy()
-        instanceSegmentation.close()
+        detectionComponent.close()
         cameraExecutor.shutdown()
     }
 
@@ -400,7 +400,7 @@ class MainActivity : ComponentActivity(), InstanceSegmentation.InstanceSegmentat
             )
 
             originalBitmap = rotatedBitmap
-            instanceSegmentation.invoke(rotatedBitmap)
+            detectionComponent.invoke(rotatedBitmap)
         }
     }
 
