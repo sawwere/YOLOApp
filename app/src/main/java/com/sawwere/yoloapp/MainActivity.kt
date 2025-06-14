@@ -2,6 +2,7 @@ package com.sawwere.yoloapp
 
 import android.Manifest
 import android.content.ContentValues
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -10,6 +11,9 @@ import android.graphics.Paint
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
@@ -401,6 +405,32 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
             originalBitmap = rotatedBitmap
             detectionComponent.invoke(rotatedBitmap)
+        }
+    }
+
+    fun triggerHapticFeedback() {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as Vibrator
+        }
+
+        if (vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                // Современный API с контролем амплитуды и длительности
+                vibrator.vibrate(
+                    VibrationEffect.createOneShot(
+                        30, // Длительность в миллисекундах
+                        VibrationEffect.DEFAULT_AMPLITUDE // Стандартная интенсивность
+                    )
+                )
+            } else {
+                // Совместимость со старыми версиями
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(30)
+            }
         }
     }
 
