@@ -24,20 +24,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.sawwere.yoloapp.MainActivity
 import kotlinx.coroutines.delay
 
 
 @Composable
 fun ShutterButton(
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    val activity = context as? MainActivity
-
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
 
@@ -97,10 +92,7 @@ fun ShutterButton(
 
         // Внутренний круг (кнопка)
         IconButton(
-            onClick = {
-                activity?.triggerHapticFeedback()
-                onClick()
-            },
+            onClick = onClick,
             interactionSource = interactionSource,
             modifier = Modifier
                 .fillMaxSize()

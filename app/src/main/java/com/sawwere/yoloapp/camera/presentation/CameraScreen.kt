@@ -22,6 +22,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,13 +41,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sawwere.yoloapp.MainActivity
 import com.sawwere.yoloapp.R
+import com.sawwere.yoloapp.core.detection.DetectionComponent
 
 
 @Composable
 fun CameraScreen(
-    preProcessTime: String,
-    inferenceTime: String,
-    postProcessTime: String,
+    viewModel: CameraScreenViewModel,
     segmentedBitmap: Bitmap?,
     zoomProgress: Float,
     minZoomRatio: Float,
@@ -56,6 +56,10 @@ fun CameraScreen(
     onCaptureClick: () -> Unit
 ) {
     val context = LocalContext.current
+
+    val preProcessTime = viewModel.preProcessTime.collectAsState()
+    val inferenceTime = viewModel.inferenceTime.collectAsState()
+    val postProcessTime= viewModel.postProcessTime.collectAsState()
 
     Column(
         modifier = Modifier
@@ -107,9 +111,9 @@ fun CameraScreen(
         }
 
         SpeedInfoPanel(
-            preProcessTime = preProcessTime,
-            inferenceTime = inferenceTime,
-            postProcessTime = postProcessTime
+            preProcessTime = preProcessTime.value,
+            inferenceTime = inferenceTime.value,
+            postProcessTime = postProcessTime.value
         )
 
         Slider(
@@ -149,9 +153,9 @@ fun CameraScreen(
 
 @Composable
 fun SpeedInfoPanel(
-    preProcessTime: String,
-    inferenceTime: String,
-    postProcessTime: String
+    preProcessTime: Long,
+    inferenceTime: Long,
+    postProcessTime: Long
 ) {
     Column(
         modifier = Modifier
@@ -167,15 +171,15 @@ fun SpeedInfoPanel(
 
         SpeedInfoRow(
             label = stringResource(R.string.preprocess_label),
-            value = preProcessTime
+            value = preProcessTime.toString()
         )
         SpeedInfoRow(
             label = stringResource(R.string.inference_label),
-            value = inferenceTime
+            value = inferenceTime.toString()
         )
         SpeedInfoRow(
             label = stringResource(R.string.postprocess_label),
-            value = postProcessTime
+            value = postProcessTime.toString()
         )
     }
 }

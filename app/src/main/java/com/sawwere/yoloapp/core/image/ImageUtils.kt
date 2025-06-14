@@ -1,4 +1,4 @@
-package com.sawwere.yoloapp
+package com.sawwere.yoloapp.core.image
 
 import kotlin.math.exp
 

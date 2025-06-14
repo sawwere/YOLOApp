@@ -1,4 +1,4 @@
-package com.sawwere.yoloapp
+package com.sawwere.yoloapp.core.image
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -6,7 +6,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.applyCanvas
 import com.sawwere.yoloapp.R
+import com.sawwere.yoloapp.core.detection.DetectionComponent
+import com.sawwere.yoloapp.core.detection.SegmentationResult
 
 class DrawImages(private val context: Context) {
 
@@ -23,15 +26,35 @@ class DrawImages(private val context: Context) {
         R.color.overlay_yellow,
     )
 
-    operator fun invoke(results: List<SegmentationResult>) : Bitmap {
-        val width = results.first().mask[0].size
-        val height = results.first().mask.size
-        val combined = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    private val boxPaint = Paint().apply {
+        color = Color.valueOf(1.0f, 0f, 0f).toArgb()
+        strokeWidth = 2F
+        style = Paint.Style.STROKE
+    }
 
-        results.forEach { result ->
-            val colorResId = boxColors[result.box.cls % 10]
-            applyTransparentOverlay(context, combined, result, colorResId)
+    private val labelPaint = Paint().apply {
+        color = Color.valueOf(0.0f, 0f, 0f).toArgb()
+        strokeWidth = 2F
+        style = Paint.Style.STROKE
+    }
+
+    operator fun invoke(
+        imageWidth: Int,
+        imageHeight: Int,
+        results: List<DetectionComponent.Detection>
+    ) : Bitmap {
+        val combined = Bitmap.createBitmap(imageWidth, imageHeight, Bitmap.Config.ARGB_8888)
+
+        results.forEach { detection ->
+            combined.applyCanvas {
+                drawRect(detection.bbox, boxPaint)
+                drawText(detection.confidence.toString(), detection.bbox.left, detection.bbox.top, labelPaint)
+            }
         }
+//        results.forEach { result ->
+//            val colorResId = boxColors[result.box.cls % 10]
+//            applyTransparentOverlay(context, combined, result, colorResId)
+//        }
         return combined
     }
 

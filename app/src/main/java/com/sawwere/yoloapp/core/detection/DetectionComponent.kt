@@ -1,11 +1,11 @@
-package com.sawwere.yoloapp
+package com.sawwere.yoloapp.core.detection
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
-import com.sawwere.yoloapp.MetaData.extractNamesFromMetadata
+import com.sawwere.yoloapp.core.detection.MetaData.extractNamesFromMetadata
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
@@ -345,21 +345,13 @@ class DetectionComponent(
     interface InstanceSegmentationListener {
         fun onError(error: String)
         fun onEmpty()
-//        fun onDetect(
-//            interfaceTime: Long,
-//            results: List<SegmentationResult>,
-//            preProcessTime: Long,
-//            postProcessTime: Long,
-//
-//            )
 
         fun onDetect(
             interfaceTime: Long,
             results: List<Detection>,
             preProcessTime: Long,
-            postProcessTime: Long,
-
-            )
+            postProcessTime: Long
+        )
     }
 
     companion object {

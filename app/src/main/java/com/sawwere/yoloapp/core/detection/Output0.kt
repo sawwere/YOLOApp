@@ -1,4 +1,4 @@
-package com.sawwere.yoloapp
+package com.sawwere.yoloapp.core.detection
 
 data class Output0(
     val x1: Float,

@@ -5,13 +5,10 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.graphics.Matrix
-import android.graphics.Paint
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.provider.MediaStore
@@ -35,9 +32,12 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.applyCanvas
 import androidx.lifecycle.lifecycleScope
 import com.sawwere.yoloapp.camera.presentation.CameraScreen
+import com.sawwere.yoloapp.camera.presentation.CameraScreenViewModel
+import com.sawwere.yoloapp.core.component.VibrationComponent
+import com.sawwere.yoloapp.core.detection.DetectionComponent
+import com.sawwere.yoloapp.core.image.DrawImages
 import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -51,25 +51,39 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     private lateinit var detectionComponent: DetectionComponent
     private lateinit var drawImages: DrawImages
     private lateinit var cameraExecutor: ExecutorService
+    private lateinit var vibrationComponent: VibrationComponent
 
     private var camera: Camera? = null
     private var segmentedBitmap: Bitmap? by mutableStateOf(null)
     private var originalBitmap: Bitmap? by mutableStateOf(null)
 
     // UI states
-    private var preProcessTime by mutableStateOf("0")
-    private var inferenceTime by mutableStateOf("0")
-    private var postProcessTime by mutableStateOf("0")
+
     private var zoomProgress by mutableFloatStateOf(0f)
     private var minZoomRatio by mutableFloatStateOf(1f)
     private var maxZoomRatio by mutableFloatStateOf(1f)
 
+    private lateinit var vibrator : Vibrator
+
+    private lateinit var viewModel : CameraScreenViewModel
+
+
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as Vibrator
+        }
+
         enableEdgeToEdge()
 
         drawImages = DrawImages(applicationContext)
         cameraExecutor = Executors.newSingleThreadExecutor()
+        viewModel = CameraScreenViewModel()
 
         detectionComponent = DetectionComponent(
             context = applicationContext,
@@ -83,12 +97,12 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             }
         )
 
+        vibrationComponent = VibrationComponent(vibrator)
+
         setContent {
             YOLOAppTheme {
                 CameraScreen(
-                    preProcessTime = preProcessTime,
-                    inferenceTime = inferenceTime,
-                    postProcessTime = postProcessTime,
+                    viewModel = this.viewModel,
                     segmentedBitmap = segmentedBitmap,
                     zoomProgress = zoomProgress,
                     minZoomRatio = minZoomRatio,
@@ -102,6 +116,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                     },
                     onCaptureClick = {
                         saveCombinedImage()
+                        vibrationComponent.triggerHapticFeedback()
                     }
                 )
             }
@@ -263,19 +278,20 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         }
 
+        val imageFileName = "combined_image_${System.currentTimeMillis()}.jpg"
+
         val contentValues = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "combined_image_${System.currentTimeMillis()}.jpg")
+            put(MediaStore.Images.Media.DISPLAY_NAME, imageFileName)
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.Images.Media.IS_PENDING, 1)
                 put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/YOLOApp")
             } else {
-                @Suppress("DEPRECATION")
                 val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
                 val file = File(directory, "/YOLOApp")
                 if (!file.exists()) file.mkdirs()
-                put(MediaStore.Images.Media.DATA, file.absolutePath + "/combined_image_${System.currentTimeMillis()}.jpg")
+                put(MediaStore.Images.Media.DATA, file.absolutePath + "/$imageFileName")
             }
         }
 
@@ -296,7 +312,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             runOnUiThread {
                 Toast.makeText(
                     this@MainActivity,
-                    getString(R.string.image_saved),
+                    getString(R.string.image_saved, imageFileName),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -305,40 +321,11 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             runOnUiThread {
                 Toast.makeText(
                     this@MainActivity,
-                    "Error saving image: ${e.message}",
+                    getString(R.string.error_saving, e.message ?: "Unknown error"),
                     Toast.LENGTH_SHORT
                 ).show()
             }
         }
-    }
-
-//    override fun onDetect(
-//        interfaceTime: Long,
-//        results: List<SegmentationResult>,
-//        preProcessTime: Long,
-//        postProcessTime: Long
-//    ) {
-//        this.preProcessTime = preProcessTime.toString()
-//        this.inferenceTime = interfaceTime.toString()
-//        this.postProcessTime = postProcessTime.toString()
-//
-//        segmentedBitmap = if (results.isNotEmpty()) {
-//            drawImages(results)
-//        } else {
-//            null
-//        }
-//    }
-
-    val boxPaint = Paint().apply {
-        color = Color.valueOf(1.0f, 0f, 0f).toArgb()
-        strokeWidth = 2F
-        style = Paint.Style.STROKE
-    }
-
-    val labelPaint = Paint().apply {
-        color = Color.valueOf(0.0f, 0f, 0f).toArgb()
-        strokeWidth = 2F
-        style = Paint.Style.STROKE
     }
 
     override fun onDetect(
@@ -347,21 +334,20 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         preProcessTime: Long,
         postProcessTime: Long
     ) {
-        this.preProcessTime = preProcessTime.toString()
-        this.inferenceTime = interfaceTime.toString()
-        this.postProcessTime = postProcessTime.toString()
+        this.viewModel.updateTimers(
+            preProcessTime = preProcessTime,
+            inferenceTime = interfaceTime,
+            postProcessTime = postProcessTime
+        )
 
         segmentedBitmap = if (results.isEmpty()) {
             null
         } else {
-            val combined = Bitmap.createBitmap(originalBitmap!!.width, originalBitmap!!.height, Bitmap.Config.ARGB_8888)
-            results.forEach { detection ->
-                combined.applyCanvas {
-                    drawRect(detection.bbox, boxPaint)
-                    drawText(detection.confidence.toString(), detection.bbox.left, detection.bbox.top, labelPaint)
-                }
-            }
-            combined
+            drawImages(
+                imageWidth = originalBitmap!!.width,
+                imageHeight = originalBitmap!!.height,
+                results = results
+            )
         }
 
 
@@ -405,32 +391,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
             originalBitmap = rotatedBitmap
             detectionComponent.invoke(rotatedBitmap)
-        }
-    }
-
-    fun triggerHapticFeedback() {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(VIBRATOR_SERVICE) as Vibrator
-        }
-
-        if (vibrator.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                // Современный API с контролем амплитуды и длительности
-                vibrator.vibrate(
-                    VibrationEffect.createOneShot(
-                        30, // Длительность в миллисекундах
-                        VibrationEffect.DEFAULT_AMPLITUDE // Стандартная интенсивность
-                    )
-                )
-            } else {
-                // Совместимость со старыми версиями
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(30)
-            }
         }
     }
 
