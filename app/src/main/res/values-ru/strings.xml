@@ -4,7 +4,7 @@
     <string name="preprocess_label">Предобработка: </string>
     <string name="inference_label">Инференс: </string>
     <string name="postprocess_label">Постобработка: </string>
-    <string name="image_saved">Изображение сохранено в Pictures/%1$s</string>
+    <string name="image_saved">Изображение сохранено в Pictures</string>
     <string name="error_saving">Ошибка сохранения: %1$s</string>
     <string name="no_image">Нет изображения для сохранения</string>
     <string name="capture_button">Снять</string>

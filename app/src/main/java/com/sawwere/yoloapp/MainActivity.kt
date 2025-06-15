@@ -1,17 +1,14 @@
 package com.sawwere.yoloapp
 
 import android.Manifest
-import android.content.ContentValues
-import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Matrix
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -34,14 +31,14 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.sawwere.yoloapp.camera.presentation.CameraScreen
 import com.sawwere.yoloapp.camera.presentation.CameraScreenViewModel
-import com.sawwere.yoloapp.core.system.VibrationComponent
+import com.sawwere.yoloapp.core.config.SaveConfig
 import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.image.DrawImages
+import com.sawwere.yoloapp.core.repository.MediaStoreRepository
+import com.sawwere.yoloapp.core.system.VibrationComponent
 import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.io.File
-import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -60,13 +57,14 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     private lateinit var vibrator : Vibrator
 
     private lateinit var viewModel : CameraScreenViewModel
+    private val mediaStoreRepository = MediaStoreRepository()
 
 
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vibratorManager.defaultVibrator
         } else {
             @Suppress("DEPRECATION")
@@ -195,7 +193,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                         original.height,
                         Bitmap.Config.ARGB_8888
                     ).apply {
-                        val canvas = android.graphics.Canvas(this)
+                        val canvas = Canvas(this)
                         canvas.drawBitmap(original, 0f, 0f, null)
                         canvas.drawBitmap(segmentedBitmap!!, 0f, 0f, null)
                     }
@@ -203,7 +201,19 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                     original
                 }
 
-                saveBitmapToMediaStore(bitmapToSave)
+                mediaStoreRepository.saveToGallery(
+                    context = applicationContext,
+                    bitmap = bitmapToSave,
+                    folderName = SaveConfig.folderName
+                )
+
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.image_saved),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             } catch (e: Exception) {
                 Log.e("CameraX", "Error saving image: ${e.message}", e)
                 runOnUiThread {
@@ -213,64 +223,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                         Toast.LENGTH_SHORT
                     ).show()
                 }
-            }
-        }
-    }
-
-    private fun saveBitmapToMediaStore(bitmap: Bitmap) {
-        val contentResolver = applicationContext.contentResolver
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        } else {
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI
-        }
-
-        val imageFileName = "combined_image_${System.currentTimeMillis()}.jpg"
-
-        val contentValues = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, imageFileName)
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Images.Media.IS_PENDING, 1)
-                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/YOLOApp")
-            } else {
-                val directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                val file = File(directory, "/YOLOApp")
-                if (!file.exists()) file.mkdirs()
-                put(MediaStore.Images.Media.DATA, file.absolutePath + "/$imageFileName")
-            }
-        }
-
-        try {
-            val uri = contentResolver.insert(collection, contentValues) ?: throw IOException("Failed to create MediaStore entry")
-            contentResolver.openOutputStream(uri)?.use { outputStream ->
-                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)) {
-                    throw IOException("Failed to compress bitmap")
-                }
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                contentValues.clear()
-                contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-                contentResolver.update(uri, contentValues, null, null)
-            }
-
-            runOnUiThread {
-                Toast.makeText(
-                    this@MainActivity,
-                    getString(R.string.image_saved, imageFileName),
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-        } catch (e: Exception) {
-            Log.e("CameraX", "Error saving to MediaStore", e)
-            runOnUiThread {
-                Toast.makeText(
-                    this@MainActivity,
-                    getString(R.string.error_saving, e.message ?: "Unknown error"),
-                    Toast.LENGTH_SHORT
-                ).show()
             }
         }
     }

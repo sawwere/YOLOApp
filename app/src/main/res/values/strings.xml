@@ -4,7 +4,7 @@
     <string name="preprocess_label">Preprocess: </string>
     <string name="inference_label">Inference: </string>
     <string name="postprocess_label">Postprocess: </string>
-    <string name="image_saved">Image saved to Pictures/%1$s</string>
+    <string name="image_saved">Image saved to Pictures</string>
     <string name="error_saving">Error saving image: %1$s</string>
     <string name="no_image">No image to save</string>
     <string name="capture_button">Capture</string>

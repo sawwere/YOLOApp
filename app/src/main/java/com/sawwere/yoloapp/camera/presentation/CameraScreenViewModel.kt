@@ -1,8 +1,6 @@
 package com.sawwere.yoloapp.camera.presentation
 
 import androidx.camera.core.Camera
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -44,21 +42,21 @@ class CameraScreenViewModel(
         val zoomState = camera.cameraInfo.zoomState.value
         zoomState?.let {
             minZoomRatio = zoomState.minZoomRatio
-            maxZoomRatio =zoomState.maxZoomRatio
+            maxZoomRatio = zoomState.maxZoomRatio
             _zoomProgress.update { calculateZoomProgress(zoomState.zoomRatio) }
         }
     }
 
     fun updateCameraZoom(newZoomValue: Float) {
         _zoomProgress.update { newZoomValue }
-        camera?.let { cam ->
+        camera.let { cam ->
             val newZoomRatio = minZoomRatio + (_zoomProgress.value / 10f) * (maxZoomRatio - minZoomRatio)
             cam.cameraControl.setZoomRatio(newZoomRatio)
         }
     }
 
     fun handlePinchZoom(scaleFactor: Float) {
-        camera?.let { cam ->
+        camera.let { cam ->
             val zoomState = cam.cameraInfo.zoomState.value ?: return
             val currentZoom = zoomState.zoomRatio
             val newZoom = currentZoom * scaleFactor

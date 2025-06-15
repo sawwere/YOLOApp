@@ -47,9 +47,6 @@ import com.sawwere.yoloapp.R
 fun CameraScreen(
     viewModel: CameraScreenViewModel,
     segmentedBitmap: Bitmap?,
-//    zoomProgress: Float,
-//    onZoomChanged: (Float) -> Unit,
-//    onZoomGesture: (Float) -> Unit,
     onCaptureClick: () -> Unit
 ) {
     val context = LocalContext.current
