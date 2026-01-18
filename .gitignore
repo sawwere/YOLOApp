@@ -3,3 +3,5 @@
 /app/build/
 /app/release/
 /.idea/
+/OpenCV/
+/OpenCV/build.gradle

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -34,13 +45,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sawwere.yoloapp.MainActivity
-import com.sawwere.yoloapp.R
 
 
 @Composable
@@ -53,8 +62,10 @@ fun CameraScreen(
 
     val preProcessTime = viewModel.preProcessTime.collectAsState()
     val inferenceTime = viewModel.inferenceTime.collectAsState()
-    val postProcessTime= viewModel.postProcessTime.collectAsState()
+    val postProcessTime = viewModel.postProcessTime.collectAsState()
     val zoomProgress = viewModel.zoomProgress.collectAsState()
+    val debugMode = viewModel.debugMode.collectAsState()
+    val processedImage = viewModel.processedImage.collectAsState()
 
     Column(
         modifier = Modifier
@@ -98,6 +109,35 @@ fun CameraScreen(
                 )
             }
 
+            SpeedInfoPanel(
+                preProcessTime = preProcessTime.value,
+                inferenceTime = inferenceTime.value,
+                postProcessTime = postProcessTime.value,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+            )
+
+            IconButton(
+                onClick = { viewModel.toggleDebugMode() },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp)
+                    .size(48.dp)
+                    .background(
+                        if (debugMode.value) Color(0xFF6200EE).copy(alpha = 0.8f)
+                        else Color.Black.copy(alpha = 0.5f),
+                        CircleShape
+                    )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.BugReport,
+                    contentDescription = "Debug Mode",
+                    tint = if (debugMode.value) Color.Yellow else Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
             LaunchedEffect(previewView) {
                 if (previewView != null) {
                     (context as? MainActivity)?.startCamera(previewView!!)
@@ -105,78 +145,224 @@ fun CameraScreen(
             }
         }
 
-        SpeedInfoPanel(
-            preProcessTime = preProcessTime.value,
-            inferenceTime = inferenceTime.value,
-            postProcessTime = postProcessTime.value
-        )
+        if (debugMode.value) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                Text(
+                    text = "Zoom Control (Debug)",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
 
-        Slider(
-            value = zoomProgress.value,
-            onValueChange = { newProgress ->
+                Slider(
+                    value = zoomProgress.value,
+                    onValueChange = { newProgress ->
                         viewModel.updateCameraZoom(newProgress)
                     },
-            valueRange = 0f..10f,
-            steps = 9,
+                    valueRange = 0f..10f,
+                    steps = 9,
+                    modifier = Modifier
+                        .fillMaxWidth(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = Color(0xFF6200EE),
+                        activeTrackColor = Color(0xFF6200EE),
+                        inactiveTrackColor = Color(0xFF6200EE).copy(alpha = 0.24f)
+                    )
+                )
+
+                Text(
+                    text = "Zoom: ${zoomProgress.value.format(1)}x",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        if (debugMode.value) {
+            Column(
+                modifier = Modifier
+                    .weight(0.5f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+            ) {
+                // Заголовок для обработанного изображения
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Processed Image (224x224)",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    if (processedImage.value != null) {
+                        IconButton(
+                            onClick = {
+                                viewModel.clearProcessedImage()
+                            },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear Processed Image",
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
+                        .border(2.dp, if (processedImage.value != null) Color.Green else Color.Gray, RoundedCornerShape(8.dp))
+                ) {
+                    if (processedImage.value != null) {
+                        Image(
+                            bitmap = processedImage.value!!.asImageBitmap(),
+                            contentDescription = "Processed Image",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(4.dp)
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "${processedImage.value!!.width}×${processedImage.value!!.height}",
+                                color = Color.White,
+                                fontSize = 10.sp
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Image,
+                                contentDescription = "No Processed Image",
+                                tint = Color.Gray,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Сделайте фото для обработки",
+                                color = Color.Gray,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            colors = SliderDefaults.colors(
-                thumbColor = Color(0xFF6200EE),
-                activeTrackColor = Color(0xFF6200EE),
-                inactiveTrackColor = Color(0xFF6200EE).copy(alpha = 0.24f)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Row(
+                modifier = Modifier.align(Alignment.CenterStart),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { viewModel.toggleDebugMode() },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.BugReport,
+                        contentDescription = "Debug Mode",
+                        tint = if (debugMode.value) Color.Yellow else Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Text(
+                    text = if (debugMode.value) "Debug ON" else "Debug OFF",
+                    color = if (debugMode.value) Color.Yellow else Color.White,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 4.dp)
+                )
+            }
+
+            ShutterButton(
+                onClick = onCaptureClick,
+                modifier = Modifier.align(Alignment.Center)
             )
-        )
 
-        // Добавлен отступ для системной панели навигации
-        Spacer(modifier = Modifier
-            .height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
-        )
+            Box(
+                modifier = Modifier.align(Alignment.CenterEnd)
+            ) {
+                if (processedImage.value != null) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Image Processed",
+                        tint = Color.Green,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+        }
 
-        // В функции CameraScreen замените Button на:
-        ShutterButton(
-            onClick = onCaptureClick,
-            modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .padding(bottom = 18.dp)
-        )
-
-        // Дополнительный отступ для безопасности
         Spacer(modifier = Modifier
             .height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
         )
     }
 }
 
+
 @Composable
 fun SpeedInfoPanel(
     preProcessTime: Long,
     inferenceTime: Long,
-    postProcessTime: Long
+    postProcessTime: Long,
+    modifier: Modifier = Modifier
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+            .padding(12.dp)
     ) {
         Text(
-            text = stringResource(R.string.speed_info),
+            text = "Speed Info",
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp,
             color = Color.White
         )
 
         SpeedInfoRow(
-            label = stringResource(R.string.preprocess_label),
-            value = preProcessTime.toString()
+            label = "Preprocess: ",
+            value = "${preProcessTime}ms"
         )
         SpeedInfoRow(
-            label = stringResource(R.string.inference_label),
-            value = inferenceTime.toString()
+            label = "Inference: ",
+            value = "${inferenceTime}ms"
         )
         SpeedInfoRow(
-            label = stringResource(R.string.postprocess_label),
-            value = postProcessTime.toString()
+            label = "Postprocess: ",
+            value = "${postProcessTime}ms"
         )
     }
 }
@@ -197,3 +383,5 @@ fun SpeedInfoRow(label: String, value: String) {
         )
     }
 }
+
+fun Float.format(digits: Int) = "%.${digits}f".format(this)

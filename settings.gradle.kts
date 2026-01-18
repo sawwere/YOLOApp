@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "YOLO Instance Segmentation"
 include(":app")
+include(":OpenCV")

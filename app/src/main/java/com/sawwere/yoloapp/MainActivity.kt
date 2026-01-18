@@ -34,13 +34,17 @@ import com.sawwere.yoloapp.camera.presentation.CameraScreenViewModel
 import com.sawwere.yoloapp.core.config.SaveConfig
 import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.image.DrawImages
+import com.sawwere.yoloapp.core.image.ImageProcessor
 import com.sawwere.yoloapp.core.repository.MediaStoreRepository
 import com.sawwere.yoloapp.core.system.VibrationComponent
 import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+
+import org.opencv.android.OpenCVLoader
 
 class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentationListener {
 
@@ -48,21 +52,28 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     private lateinit var drawImages: DrawImages
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var vibrationComponent: VibrationComponent
+    private lateinit var imageProcessor: ImageProcessor
 
     private var camera: Camera? = null
     private var segmentedBitmap: Bitmap? by mutableStateOf(null)
     private var originalBitmap: Bitmap? by mutableStateOf(null)
-
 
     private lateinit var vibrator : Vibrator
 
     private lateinit var viewModel : CameraScreenViewModel
     private val mediaStoreRepository = MediaStoreRepository()
 
-
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (OpenCVLoader.initLocal()) {
+            Log.i("MainActivity", "OpenCV loaded successfully")
+        } else {
+            Log.e("MainActivity", "OpenCV initialization failed!")
+            (Toast.makeText(this, "OpenCV initialization failed!", Toast.LENGTH_LONG)).show()
+            return
+        }
+
         vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
             vibratorManager.defaultVibrator
@@ -76,12 +87,11 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         drawImages = DrawImages(applicationContext)
         cameraExecutor = Executors.newSingleThreadExecutor()
         viewModel = CameraScreenViewModel()
+        imageProcessor = ImageProcessor()
 
         detectionComponent = DetectionComponent(
             context = applicationContext,
-            //modelPath = "yolo11n-seg_float16.tflite",
             modelPath = "yolov8s_float16.tflite",
-            //modelPath = "model_fp16.tflite",
             labelPath = null,
             instanceSegmentationListener = this,
             message = {
@@ -97,7 +107,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                     viewModel = this.viewModel,
                     segmentedBitmap = segmentedBitmap,
                     onCaptureClick = {
-                        saveCombinedImage()
+                        captureAndProcessImage()
                         vibrationComponent.triggerHapticFeedback()
                     }
                 )
@@ -105,6 +115,110 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         }
 
         checkPermission()
+    }
+
+    private fun captureAndProcessImage() {
+        val original = originalBitmap ?: run {
+            Toast.makeText(this, getString(R.string.no_image), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val combinedBitmap = if (segmentedBitmap != null) {
+            Bitmap.createBitmap(
+                original.width,
+                original.height,
+                Bitmap.Config.ARGB_8888
+            ).apply {
+                val canvas = Canvas(this)
+                canvas.drawBitmap(original, 0f, 0f, null)
+                canvas.drawBitmap(segmentedBitmap!!, 0f, 0f, null)
+            }
+        } else {
+            original
+        }
+
+        saveToGallery(combinedBitmap)
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            var processedBitmap: Bitmap? = null
+
+            try {
+                processedBitmap = imageProcessor.processDocumentImageEnhanced(combinedBitmap)
+            } catch (e: Exception) {
+                Log.e("ImageProcessor", "Enhanced processing failed: ${e.message}", e)
+
+                try {
+                    processedBitmap = imageProcessor.processDocumentImage(combinedBitmap)
+                } catch (e2: Exception) {
+                    Log.e("ImageProcessor", "Standard processing failed: ${e2.message}", e2)
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                if (processedBitmap != null) {
+                    viewModel.setProcessedImage(processedBitmap)
+
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Изображение обработано и нормализовано до 224x224",
+                        Toast.LENGTH_SHORT
+                    ).show()
+
+                    saveProcessedImageToGallery(processedBitmap)
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Не удалось обработать изображение",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+
+            combinedBitmap.recycle()
+        }
+    }
+
+    private fun saveToGallery(bitmap: Bitmap) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                mediaStoreRepository.saveToGallery(
+                    context = applicationContext,
+                    bitmap = bitmap,
+                    folderName = SaveConfig.folderName
+                )
+
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.image_saved),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Log.e("CameraX", "Error saving image: ${e.message}", e)
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        getString(R.string.error_saving, e.message ?: "Unknown error"),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun saveProcessedImageToGallery(bitmap: Bitmap) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                mediaStoreRepository.saveToGallery(
+                    context = applicationContext,
+                    bitmap = bitmap,
+                    folderName = "${SaveConfig.folderName}_processed"
+                )
+            } catch (e: Exception) {
+                Log.e("ImageProcessor", "Error saving processed image: ${e.message}")
+            }
+        }
     }
 
     private fun checkPermission() = lifecycleScope.launch(Dispatchers.IO) {
@@ -179,54 +293,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun saveCombinedImage() {
-        val original = originalBitmap ?: run {
-            Toast.makeText(this, getString(R.string.no_image), Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val bitmapToSave = if (segmentedBitmap != null) {
-                    Bitmap.createBitmap(
-                        original.width,
-                        original.height,
-                        Bitmap.Config.ARGB_8888
-                    ).apply {
-                        val canvas = Canvas(this)
-                        canvas.drawBitmap(original, 0f, 0f, null)
-                        canvas.drawBitmap(segmentedBitmap!!, 0f, 0f, null)
-                    }
-                } else {
-                    original
-                }
-
-                mediaStoreRepository.saveToGallery(
-                    context = applicationContext,
-                    bitmap = bitmapToSave,
-                    folderName = SaveConfig.folderName
-                )
-
-                runOnUiThread {
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(R.string.image_saved),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            } catch (e: Exception) {
-                Log.e("CameraX", "Error saving image: ${e.message}", e)
-                runOnUiThread {
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(R.string.error_saving, e.message ?: "Unknown error"),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-        }
-    }
-
     override fun onDetect(
         interfaceTime: Long,
         results: List<DetectionComponent.Detection>,
@@ -248,8 +314,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                 results = results
             )
         }
-
-
     }
 
     override fun onEmpty() {

@@ -1,13 +1,12 @@
 package com.sawwere.yoloapp.camera.presentation
 
+import android.graphics.Bitmap
 import androidx.camera.core.Camera
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-class CameraScreenViewModel(
-
-) {
+class CameraScreenViewModel() {
     private lateinit var camera: Camera
 
     private val _preProcessTime = MutableStateFlow(0L)
@@ -22,9 +21,14 @@ class CameraScreenViewModel(
     private val _zoomProgress = MutableStateFlow(0f)
     val zoomProgress = _zoomProgress.asStateFlow()
 
+    private val _debugMode = MutableStateFlow(false)
+    val debugMode = _debugMode.asStateFlow()
+
+    private val _processedImage = MutableStateFlow<Bitmap?>(null)
+    val processedImage = _processedImage.asStateFlow()
+
     private var minZoomRatio = 1f
     private var maxZoomRatio = 1f
-
 
     fun updateTimers(
         preProcessTime: Long,
@@ -34,6 +38,18 @@ class CameraScreenViewModel(
         _inferenceTime.update { inferenceTime }
         _preProcessTime.update { preProcessTime }
         _postProcessTime.update { postProcessTime }
+    }
+
+    fun toggleDebugMode() {
+        _debugMode.update { !it }
+    }
+
+    fun setProcessedImage(bitmap: Bitmap?) {
+        _processedImage.value = bitmap
+    }
+
+    fun clearProcessedImage() {
+        _processedImage.value = null
     }
 
     fun setupZoomState(camera: Camera) {
@@ -71,7 +87,10 @@ class CameraScreenViewModel(
     }
 
     private fun calculateZoomProgress(zoomRatio: Float): Float {
-        return ((zoomRatio - minZoomRatio) / (maxZoomRatio - minZoomRatio)) * 10f
+        return if (maxZoomRatio > minZoomRatio) {
+            ((zoomRatio - minZoomRatio) / (maxZoomRatio - minZoomRatio)) * 10f
+        } else {
+            0f
+        }
     }
-
 }
