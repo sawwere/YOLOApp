@@ -1,6 +1,8 @@
 package com.sawwere.yoloapp.camera.presentation
 
 import android.graphics.Bitmap
+import android.util.Log
+import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -19,13 +21,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -40,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -65,19 +68,27 @@ fun CameraScreen(
     val postProcessTime = viewModel.postProcessTime.collectAsState()
     val zoomProgress = viewModel.zoomProgress.collectAsState()
     val debugMode = viewModel.debugMode.collectAsState()
-    val processedImage = viewModel.processedImage.collectAsState()
+    val processedSegments = viewModel.processedSegments
+    val detectedObjectsCount = viewModel.detectedObjectsCount.collectAsState()
+
+    val currentSegment = remember(processedSegments) {
+        Log.d("CameraScreen", "Remember recalculated. Segments: ${processedSegments.size}")
+        if (processedSegments.isNotEmpty()) {
+            Log.d("CameraScreen", "First segment: ${processedSegments.first().width}x${processedSegments.first().height}")
+            processedSegments.first()
+        } else null
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Camera preview with overlay
         Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
                 .pointerInput(Unit) {
                     detectTransformGestures { _, _, zoom, _ ->
                         viewModel.handlePinchZoom(zoom)
@@ -113,30 +124,11 @@ fun CameraScreen(
                 preProcessTime = preProcessTime.value,
                 inferenceTime = inferenceTime.value,
                 postProcessTime = postProcessTime.value,
+                detectedObjects = detectedObjectsCount.value,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(8.dp)
             )
-
-            IconButton(
-                onClick = { viewModel.toggleDebugMode() },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-                    .size(48.dp)
-                    .background(
-                        if (debugMode.value) Color(0xFF6200EE).copy(alpha = 0.8f)
-                        else Color.Black.copy(alpha = 0.5f),
-                        CircleShape
-                    )
-            ) {
-                Icon(
-                    imageVector = Icons.Default.BugReport,
-                    contentDescription = "Debug Mode",
-                    tint = if (debugMode.value) Color.Yellow else Color.White,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
 
             LaunchedEffect(previewView) {
                 if (previewView != null) {
@@ -199,25 +191,36 @@ fun CameraScreen(
                         .padding(bottom = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Processed Image (224x224)",
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Column {
+                        Text(
+                            text = "Captured Segment (224x224)",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (processedSegments.isNotEmpty())
+                                "Object 1 of ${detectedObjectsCount.value} (captured)"
+                            else "Нажмите кнопку для захвата",
+                            color = if (processedSegments.isNotEmpty()) Color.Green else Color.Yellow,
+                            fontSize = 10.sp
+                        )
+                    }
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    if (processedImage.value != null) {
+                    // Кнопка для очистки всех сегментов
+                    if (processedSegments.isNotEmpty()) {
                         IconButton(
                             onClick = {
-                                viewModel.clearProcessedImage()
+                                viewModel.clearAllSegments()
+                                Toast.makeText(context, "Сегменты очищены", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.size(24.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Clear,
-                                contentDescription = "Clear Processed Image",
+                                imageVector = Icons.Filled.Clear,
+                                contentDescription = "Clear All Segments",
                                 tint = Color.White,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -225,22 +228,31 @@ fun CameraScreen(
                     }
                 }
 
+                // Контейнер для обработанного изображения
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black)
-                        .border(2.dp, if (processedImage.value != null) Color.Green else Color.Gray, RoundedCornerShape(8.dp))
+                        .border(2.dp,
+                            when {
+                                currentSegment != null -> Color.Green
+                                detectedObjectsCount.value > 0 -> Color.Yellow
+                                else -> Color.Gray
+                            },
+                            RoundedCornerShape(8.dp)
+                        )
                 ) {
-                    if (processedImage.value != null) {
+                    if (currentSegment != null) {
                         Image(
-                            bitmap = processedImage.value!!.asImageBitmap(),
-                            contentDescription = "Processed Image",
+                            bitmap = currentSegment.asImageBitmap(),
+                            contentDescription = "Processed Segment",
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(4.dp)
                         )
 
+                        // Информация о размере изображения
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
@@ -248,28 +260,69 @@ fun CameraScreen(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "${processedImage.value!!.width}×${processedImage.value!!.height}",
+                                text = "${currentSegment.width}×${currentSegment.height}",
                                 color = Color.White,
                                 fontSize = 10.sp
                             )
                         }
+
+                        // Индикатор, что это вырезанный сегмент
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "CROPPED",
+                                color = Color.Yellow,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     } else {
+                        // Плейсхолдер, когда нет сегментов
                         Column(
                             modifier = Modifier.align(Alignment.Center),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(
-                                imageVector = Icons.Filled.Image,
-                                contentDescription = "No Processed Image",
-                                tint = Color.Gray,
-                                modifier = Modifier.size(48.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Сделайте фото для обработки",
-                                color = Color.Gray,
-                                fontSize = 12.sp
-                            )
+                            when {
+                                detectedObjectsCount.value > 0 -> {
+                                    // Объекты обнаружены, но не захвачены
+                                    Icon(
+                                        imageVector = Icons.Filled.PhotoCamera,
+                                        contentDescription = "Ready to Capture",
+                                        tint = Color.Yellow,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Обнаружено: ${detectedObjectsCount.value}",
+                                        color = Color.Yellow,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        text = "Нажмите кнопку для захвата",
+                                        color = Color.Yellow,
+                                        fontSize = 10.sp
+                                    )
+                                }
+                                else -> {
+                                    // Нет объектов
+                                    Icon(
+                                        imageVector = Icons.Filled.Image,
+                                        contentDescription = "No Objects",
+                                        tint = Color.Gray,
+                                        modifier = Modifier.size(48.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Нет обнаруженных объектов",
+                                        color = Color.Gray,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -277,6 +330,7 @@ fun CameraScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
         }
+
 
         Box(
             modifier = Modifier
@@ -292,7 +346,7 @@ fun CameraScreen(
                     modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.BugReport,
+                        imageVector = Icons.Filled.BugReport,
                         contentDescription = "Debug Mode",
                         tint = if (debugMode.value) Color.Yellow else Color.White,
                         modifier = Modifier.size(20.dp)
@@ -315,10 +369,10 @@ fun CameraScreen(
             Box(
                 modifier = Modifier.align(Alignment.CenterEnd)
             ) {
-                if (processedImage.value != null) {
+                if (processedSegments.isNotEmpty()) {
                     Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "Image Processed",
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = "Segments Stored",
                         tint = Color.Green,
                         modifier = Modifier.size(24.dp)
                     )
@@ -338,48 +392,93 @@ fun SpeedInfoPanel(
     preProcessTime: Long,
     inferenceTime: Long,
     postProcessTime: Long,
+    detectedObjects: Int,
     modifier: Modifier = Modifier
 ) {
-    Column(
+    Box(
         modifier = modifier
-            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+            .shadow(4.dp, RoundedCornerShape(8.dp))
             .padding(12.dp)
     ) {
-        Text(
-            text = "Speed Info",
-            fontWeight = FontWeight.Bold,
-            fontSize = 16.sp,
-            color = Color.White
-        )
+        Column {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = "Processing Info",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = Color.White,
+                    modifier = Modifier.weight(1f)
+                )
 
-        SpeedInfoRow(
-            label = "Preprocess: ",
-            value = "${preProcessTime}ms"
-        )
-        SpeedInfoRow(
-            label = "Inference: ",
-            value = "${inferenceTime}ms"
-        )
-        SpeedInfoRow(
-            label = "Postprocess: ",
-            value = "${postProcessTime}ms"
-        )
+                Box(
+                    modifier = Modifier
+                        .background(
+                            if (detectedObjects > 0) Color.Green else Color.Gray,
+                            RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "$detectedObjects obj",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            SpeedInfoRow(
+                label = "Preprocess: ",
+                value = "${preProcessTime}ms",
+                color = Color(0xFF4CAF50)
+            )
+            SpeedInfoRow(
+                label = "Inference: ",
+                value = "${inferenceTime}ms",
+                color = Color(0xFF2196F3)
+            )
+            SpeedInfoRow(
+                label = "Postprocess: ",
+                value = "${postProcessTime}ms",
+                color = Color(0xFFFF9800)
+            )
+
+            val totalTime = preProcessTime + inferenceTime + postProcessTime
+            SpeedInfoRow(
+                label = "Total: ",
+                value = "${totalTime}ms",
+                color = Color.White,
+                fontWeight = FontWeight.Bold
+            )
+        }
     }
 }
 
 @Composable
-fun SpeedInfoRow(label: String, value: String) {
+fun SpeedInfoRow(
+    label: String,
+    value: String,
+    color: Color = Color.White,
+    fontWeight: FontWeight? = null
+) {
     Row(
         modifier = Modifier.padding(vertical = 2.dp)
     ) {
         Text(
             text = label,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
+            color = color,
+            fontSize = 12.sp,
+            fontWeight = fontWeight
         )
         Text(
             text = value,
-            color = Color.White
+            color = color,
+            fontSize = 12.sp,
+            fontWeight = fontWeight
         )
     }
 }

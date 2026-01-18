@@ -1,7 +1,10 @@
 package com.sawwere.yoloapp.camera.presentation
 
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.camera.core.Camera
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -24,8 +27,11 @@ class CameraScreenViewModel() {
     private val _debugMode = MutableStateFlow(false)
     val debugMode = _debugMode.asStateFlow()
 
-    private val _processedImage = MutableStateFlow<Bitmap?>(null)
-    val processedImage = _processedImage.asStateFlow()
+    private val _processedSegments = mutableStateOf<List<Bitmap>>(emptyList())
+    val processedSegments: List<Bitmap> get() = _processedSegments.value
+
+    private val _detectedObjectsCount = MutableStateFlow(0)
+    val detectedObjectsCount = _detectedObjectsCount.asStateFlow()
 
     private var minZoomRatio = 1f
     private var maxZoomRatio = 1f
@@ -44,12 +50,29 @@ class CameraScreenViewModel() {
         _debugMode.update { !it }
     }
 
-    fun setProcessedImage(bitmap: Bitmap?) {
-        _processedImage.value = bitmap
+    fun addProcessedSegment(bitmap: Bitmap) {
+        Log.d("ViewModel", "Adding segment. Current count: ${_processedSegments.value.size}")
+        // Создаем новый список с добавленным элементом
+        _processedSegments.value = _processedSegments.value + bitmap
+        Log.d("ViewModel", "Segment added. New count: ${_processedSegments.value.size}")
     }
 
-    fun clearProcessedImage() {
-        _processedImage.value = null
+    fun clearAllSegments() {
+        Log.d("ViewModel", "Clearing all segments. Count: ${_processedSegments.value.size}")
+        _processedSegments.value.forEach {
+            try {
+                it.recycle()
+            } catch (e: Exception) {
+                Log.e("ViewModel", "Error recycling bitmap", e)
+            }
+        }
+        _processedSegments.value = emptyList()
+        Log.d("ViewModel", "All segments cleared")
+    }
+
+
+    fun updateDetectionInfo(resultsCount: Int) {
+        _detectedObjectsCount.value = resultsCount
     }
 
     fun setupZoomState(camera: Camera) {

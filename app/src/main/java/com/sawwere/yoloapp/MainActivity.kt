@@ -1,6 +1,7 @@
 package com.sawwere.yoloapp
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -9,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -27,6 +29,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.sawwere.yoloapp.camera.presentation.CameraScreen
@@ -41,10 +44,12 @@ import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.opencv.android.OpenCVLoader
+import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-
-import org.opencv.android.OpenCVLoader
+import kotlin.math.max
+import kotlin.math.min
 
 class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentationListener {
 
@@ -57,6 +62,9 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     private var camera: Camera? = null
     private var segmentedBitmap: Bitmap? by mutableStateOf(null)
     private var originalBitmap: Bitmap? by mutableStateOf(null)
+
+    private var capturedDetections: List<DetectionComponent.Detection> by mutableStateOf(emptyList())
+    private var capturedOriginalBitmap: Bitmap? by mutableStateOf(null)
 
     private lateinit var vibrator : Vibrator
 
@@ -107,7 +115,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                     viewModel = this.viewModel,
                     segmentedBitmap = segmentedBitmap,
                     onCaptureClick = {
-                        captureAndProcessImage()
+                        captureCurrentFrame()
                         vibrationComponent.triggerHapticFeedback()
                     }
                 )
@@ -117,106 +125,91 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         checkPermission()
     }
 
-    private fun captureAndProcessImage() {
-        val original = originalBitmap ?: run {
-            Toast.makeText(this, getString(R.string.no_image), Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        val combinedBitmap = if (segmentedBitmap != null) {
-            Bitmap.createBitmap(
-                original.width,
-                original.height,
-                Bitmap.Config.ARGB_8888
-            ).apply {
-                val canvas = Canvas(this)
-                canvas.drawBitmap(original, 0f, 0f, null)
-                canvas.drawBitmap(segmentedBitmap!!, 0f, 0f, null)
-            }
-        } else {
-            original
-        }
-
-        saveToGallery(combinedBitmap)
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            var processedBitmap: Bitmap? = null
-
-            try {
-                processedBitmap = imageProcessor.processDocumentImageEnhanced(combinedBitmap)
-            } catch (e: Exception) {
-                Log.e("ImageProcessor", "Enhanced processing failed: ${e.message}", e)
-
-                try {
-                    processedBitmap = imageProcessor.processDocumentImage(combinedBitmap)
-                } catch (e2: Exception) {
-                    Log.e("ImageProcessor", "Standard processing failed: ${e2.message}", e2)
-                }
-            }
-
-            withContext(Dispatchers.Main) {
-                if (processedBitmap != null) {
-                    viewModel.setProcessedImage(processedBitmap)
-
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Изображение обработано и нормализовано до 224x224",
-                        Toast.LENGTH_SHORT
-                    ).show()
-
-                    saveProcessedImageToGallery(processedBitmap)
-                } else {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Не удалось обработать изображение",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-
-            combinedBitmap.recycle()
-        }
-    }
-
     private fun saveToGallery(bitmap: Bitmap) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                mediaStoreRepository.saveToGallery(
-                    context = applicationContext,
-                    bitmap = bitmap,
-                    folderName = SaveConfig.folderName
-                )
+                // Убедимся, что у нас есть разрешение на запись
+                if (ContextCompat.checkSelfPermission(
+                        applicationContext,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                    ) != PackageManager.PERMISSION_GRANTED &&
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+                ) {
+                    // Запросить разрешение, если нужно
+                    withContext(Dispatchers.Main) {
+                        ActivityCompat.requestPermissions(
+                            this@MainActivity,
+                            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+                            REQUEST_WRITE_PERMISSION
+                        )
+                    }
+                    // Освобождаем bitmap, если не можем сохранить
+                    bitmap.recycle()
+                    return@launch
+                }
 
-                runOnUiThread {
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, "capture_${System.currentTimeMillis()}.jpg")
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/${SaveConfig.folderName}")
+                        put(MediaStore.Images.Media.IS_PENDING, 1)
+                    } else {
+                        put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
+                        put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
+                    }
+                }
+
+                val resolver = applicationContext.contentResolver
+                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+                uri?.let {
+                    try {
+                        resolver.openOutputStream(it)?.use { outputStream ->
+                            if (bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)) {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                    contentValues.clear()
+                                    contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+                                    resolver.update(uri, contentValues, null, null)
+                                }
+
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(
+                                        this@MainActivity,
+                                        "Изображение сохранено в галерею",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                    Log.d("GallerySave", "Image saved successfully: $uri")
+                                }
+                            } else {
+                                throw IOException("Failed to compress bitmap")
+                            }
+                        } ?: throw IOException("Failed to open output stream")
+                    } catch (e: Exception) {
+                        // Удаляем запись если произошла ошибка
+                        resolver.delete(uri, null, null)
+                        throw e
+                    } finally {
+                        // Освобождаем bitmap после сохранения
+                        bitmap.recycle()
+                    }
+                } ?: run {
+                    bitmap.recycle()
+                    throw IOException("Failed to create new MediaStore record")
+                }
+
+            } catch (e: Exception) {
+                Log.e("GallerySave", "Error saving image: ${e.message}", e)
+                // Освобождаем bitmap при ошибке
+                bitmap.recycle()
+
+                withContext(Dispatchers.Main) {
                     Toast.makeText(
                         this@MainActivity,
-                        getString(R.string.image_saved),
+                        "Ошибка сохранения: ${e.message}",
                         Toast.LENGTH_SHORT
                     ).show()
                 }
-            } catch (e: Exception) {
-                Log.e("CameraX", "Error saving image: ${e.message}", e)
-                runOnUiThread {
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(R.string.error_saving, e.message ?: "Unknown error"),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-        }
-    }
-
-    private fun saveProcessedImageToGallery(bitmap: Bitmap) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                mediaStoreRepository.saveToGallery(
-                    context = applicationContext,
-                    bitmap = bitmap,
-                    folderName = "${SaveConfig.folderName}_processed"
-                )
-            } catch (e: Exception) {
-                Log.e("ImageProcessor", "Error saving processed image: ${e.message}")
             }
         }
     }
@@ -293,6 +286,129 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         }, ContextCompat.getMainExecutor(this))
     }
 
+    private fun captureCurrentFrame() {
+        val original = originalBitmap ?: run {
+            Toast.makeText(this, getString(R.string.no_image), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        // Сохраняем текущие обнаруженные объекты и оригинальное изображение
+        capturedOriginalBitmap = original
+
+        // Создаем комбинированное изображение для сохранения в галерею
+        val bitmapToSave = if (segmentedBitmap != null) {
+            Bitmap.createBitmap(
+                original.width,
+                original.height,
+                Bitmap.Config.ARGB_8888
+            ).apply {
+                val canvas = Canvas(this)
+                canvas.drawBitmap(original, 0f, 0f, null)
+                canvas.drawBitmap(segmentedBitmap!!, 0f, 0f, null)
+            }
+        } else {
+            // Создаем копию оригинального изображения для сохранения
+            original.copy(original.config!!, true)
+        }
+
+        // Сохраняем в галерею (передаем bitmap и управление им)
+        saveToGallery(bitmapToSave)
+
+        // Обрабатываем захваченные сегменты
+        processCapturedSegments()
+    }
+
+    private fun processCapturedSegments() {
+        Log.d("SegmentDebug", "Starting segment processing...")
+        Log.d("SegmentDebug", "Captured bitmap: ${capturedOriginalBitmap != null}")
+        Log.d("SegmentDebug", "Captured detections: ${capturedDetections.size}")
+
+        if (capturedOriginalBitmap == null || capturedDetections.isEmpty()) {
+            Log.d("SegmentDebug", "No captured data to process")
+            viewModel.clearAllSegments()
+            runOnUiThread {
+                Toast.makeText(this, "Нет обнаруженных объектов для обработки", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
+        // Очищаем старые сегменты
+        viewModel.clearAllSegments()
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                Log.d("SegmentDebug", "Processing ${capturedDetections.size} detections")
+
+                // Обрабатываем каждый обнаруженный объект
+                for ((index, detection) in capturedDetections.withIndex()) {
+                    try {
+                        Log.d("SegmentDebug", "Processing detection $index")
+
+                        // Вырезаем область объекта
+                        val croppedSegment = extractObjectSegment(capturedOriginalBitmap!!, detection)
+                        Log.d("SegmentDebug", "Cropped segment for object $index: ${croppedSegment?.width}x${croppedSegment?.height}")
+
+                        if (croppedSegment != null) {
+                            // Обрабатываем вырезанный сегмент
+                            val processedBitmap = processSingleSegment(croppedSegment)
+                            Log.d("SegmentDebug", "Processed bitmap for object $index: ${processedBitmap?.width}x${processedBitmap?.height}")
+
+                            if (processedBitmap != null) {
+                                withContext(Dispatchers.Main) {
+                                    // Добавляем обработанный сегмент в список
+                                    viewModel.addProcessedSegment(processedBitmap)
+                                    Log.d("SegmentDebug", "Added segment $index to ViewModel")
+
+                                    // Обновляем счетчик найденных объектов
+                                    viewModel.updateDetectionInfo(capturedDetections.size)
+
+                                    if (index == 0) {
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Обработано ${capturedDetections.size} объектов",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            } else {
+                                Log.w("SegmentDebug", "Processed bitmap is null for object $index")
+                            }
+
+                            croppedSegment.recycle()
+                        } else {
+                            Log.w("SegmentDebug", "Cropped segment is null for object $index")
+                            Log.w("SegmentDebug", "BBox: [${detection.bbox.left}, ${detection.bbox.top}, ${detection.bbox.right}, ${detection.bbox.bottom}]")
+                            Log.w("SegmentDebug", "Image size: ${capturedOriginalBitmap!!.width}x${capturedOriginalBitmap!!.height}")
+                        }
+                    } catch (e: Exception) {
+                        Log.e("SegmentDebug", "Error processing object $index: ${e.message}", e)
+                    }
+                }
+
+                // Проверяем, есть ли сегменты в ViewModel
+                withContext(Dispatchers.Main) {
+                    Log.d("SegmentDebug", "Final segment count in ViewModel: ${viewModel.processedSegments.size}")
+                    if (viewModel.processedSegments.isEmpty()) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Не удалось обработать ни одного сегмента",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("SegmentDebug", "Error processing captured segments: ${e.message}", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Ошибка обработки сегментов: ${e.message}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
     override fun onDetect(
         interfaceTime: Long,
         results: List<DetectionComponent.Detection>,
@@ -305,6 +421,10 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             postProcessTime = postProcessTime
         )
 
+        // Обновляем информацию о текущих обнаруженных объектах
+        viewModel.updateDetectionInfo(results.size)
+
+        // Создаем сегментированное изображение для отображения в реальном времени
         segmentedBitmap = if (results.isEmpty()) {
             null
         } else {
@@ -313,6 +433,71 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                 imageHeight = originalBitmap!!.height,
                 results = results
             )
+        }
+
+        // Сохраняем текущие детекции для возможного захвата
+        // (но обработку будем делать только при нажатии на кнопку)
+        capturedDetections = results
+    }
+
+
+    private fun extractObjectSegment(
+        originalBitmap: Bitmap,
+        detection: DetectionComponent.Detection
+    ): Bitmap? {
+        return try {
+            val boundingBox = detection.bbox
+
+            // Координаты уже в пикселях из DetectionComponent
+            val left = boundingBox.left.toInt()
+            val top = boundingBox.top.toInt()
+            val right = boundingBox.right.toInt()
+            val bottom = boundingBox.bottom.toInt()
+
+            Log.d("SegmentExtraction",
+                "Extracting segment - BBox: [$left, $top, $right, $bottom], " +
+                        "Image: ${originalBitmap.width}x${originalBitmap.height}")
+
+            // Проверяем, что координаты валидны
+            if (left >= right || top >= bottom) {
+                Log.w("SegmentExtraction", "Invalid bounding box coordinates")
+                return null
+            }
+
+            // Проверяем границы с небольшим запасом
+            val padding = 5
+            val clampedLeft = max(left - padding, 0)
+            val clampedTop = max(top - padding, 0)
+            val clampedRight = min(right + padding, originalBitmap.width)
+            val clampedBottom = min(bottom + padding, originalBitmap.height)
+
+            val width = clampedRight - clampedLeft
+            val height = clampedBottom - clampedTop
+
+            if (width <= 0 || height <= 0) {
+                Log.w("SegmentExtraction", "Invalid dimensions after clamping: $width x $height")
+                return null
+            }
+
+            // Вырезаем область
+            val segment = Bitmap.createBitmap(
+                originalBitmap,
+                clampedLeft, clampedTop, width, height
+            )
+
+            Log.d("SegmentExtraction", "Successfully extracted segment: ${segment.width}x${segment.height}")
+            segment
+        } catch (e: Exception) {
+            Log.e("SegmentExtraction", "Error extracting object segment: ${e.message}", e)
+            null
+        }
+    }
+    private fun processSingleSegment(segmentBitmap: Bitmap): Bitmap? {
+        return try {
+            imageProcessor.processDocumentImageEnhanced(segmentBitmap)
+        } catch (e: Exception) {
+            Log.e("ImageProcessor", "Error in segment processing: ${e.message}")
+            return null
         }
     }
 
@@ -358,6 +543,10 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     }
 
     companion object {
-        val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
+        val REQUIRED_PERMISSIONS = arrayOf(
+            Manifest.permission.CAMERA,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        )
+        private const val REQUEST_WRITE_PERMISSION = 101
     }
 }
