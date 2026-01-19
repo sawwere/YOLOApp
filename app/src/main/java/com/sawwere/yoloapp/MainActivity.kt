@@ -332,7 +332,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             return
         }
 
-        // Очищаем старые сегменты
         viewModel.clearAllSegments()
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -344,31 +343,17 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                     try {
                         Log.d("SegmentDebug", "Processing detection $index")
 
-                        // Вырезаем область объекта
                         val croppedSegment = extractObjectSegment(capturedOriginalBitmap!!, detection)
                         Log.d("SegmentDebug", "Cropped segment for object $index: ${croppedSegment?.width}x${croppedSegment?.height}")
 
                         if (croppedSegment != null) {
-                            // Обрабатываем вырезанный сегмент
                             val processedBitmap = processSingleSegment(croppedSegment)
                             Log.d("SegmentDebug", "Processed bitmap for object $index: ${processedBitmap?.width}x${processedBitmap?.height}")
 
                             if (processedBitmap != null) {
                                 withContext(Dispatchers.Main) {
-                                    // Добавляем обработанный сегмент в список
                                     viewModel.addProcessedSegment(processedBitmap)
                                     Log.d("SegmentDebug", "Added segment $index to ViewModel")
-
-                                    // Обновляем счетчик найденных объектов
-                                    viewModel.updateDetectionInfo(capturedDetections.size)
-
-                                    if (index == 0) {
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            "Обработано ${capturedDetections.size} объектов",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
                                 }
                             } else {
                                 Log.w("SegmentDebug", "Processed bitmap is null for object $index")
@@ -385,13 +370,20 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                     }
                 }
 
-                // Проверяем, есть ли сегменты в ViewModel
                 withContext(Dispatchers.Main) {
                     Log.d("SegmentDebug", "Final segment count in ViewModel: ${viewModel.processedSegments.size}")
+                    viewModel.updateDetectionInfo(capturedDetections.size)
+
                     if (viewModel.processedSegments.isEmpty()) {
                         Toast.makeText(
                             this@MainActivity,
                             "Не удалось обработать ни одного сегмента",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Обработано ${viewModel.processedSegments.size} объектов",
                             Toast.LENGTH_SHORT
                         ).show()
                     }

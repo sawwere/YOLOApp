@@ -3,13 +3,12 @@ package com.sawwere.yoloapp.camera.presentation
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.camera.core.Camera
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
-class CameraScreenViewModel() {
+class CameraScreenViewModel {
     private lateinit var camera: Camera
 
     private val _preProcessTime = MutableStateFlow(0L)
@@ -24,12 +23,19 @@ class CameraScreenViewModel() {
     private val _zoomProgress = MutableStateFlow(0f)
     val zoomProgress = _zoomProgress.asStateFlow()
 
+    // Состояние для режима отладки
     private val _debugMode = MutableStateFlow(false)
     val debugMode = _debugMode.asStateFlow()
 
+    // Список обработанных сегментов
     private val _processedSegments = mutableStateOf<List<Bitmap>>(emptyList())
     val processedSegments: List<Bitmap> get() = _processedSegments.value
 
+    // Текущий индекс отображаемого сегмента
+    private val _currentSegmentIndex = mutableStateOf(0)
+    val currentSegmentIndex: Int get() = _currentSegmentIndex.value
+
+    // Количество найденных объектов
     private val _detectedObjectsCount = MutableStateFlow(0)
     val detectedObjectsCount = _detectedObjectsCount.asStateFlow()
 
@@ -53,7 +59,7 @@ class CameraScreenViewModel() {
     fun addProcessedSegment(bitmap: Bitmap) {
         Log.d("ViewModel", "Adding segment. Current count: ${_processedSegments.value.size}")
         // Создаем новый список с добавленным элементом
-        _processedSegments.value = _processedSegments.value + bitmap
+        _processedSegments.value += bitmap
         Log.d("ViewModel", "Segment added. New count: ${_processedSegments.value.size}")
     }
 
@@ -67,9 +73,34 @@ class CameraScreenViewModel() {
             }
         }
         _processedSegments.value = emptyList()
+        _currentSegmentIndex.value = 0
         Log.d("ViewModel", "All segments cleared")
     }
 
+    fun nextSegment() {
+        if (_processedSegments.value.size > 1) {
+            _currentSegmentIndex.value = (_currentSegmentIndex.value + 1) % _processedSegments.value.size
+            Log.d("ViewModel", "Next segment. New index: ${_currentSegmentIndex.value}")
+        }
+    }
+
+    fun previousSegment() {
+        if (_processedSegments.value.size > 1) {
+            _currentSegmentIndex.value = if (_currentSegmentIndex.value - 1 >= 0) {
+                _currentSegmentIndex.value - 1
+            } else {
+                _processedSegments.value.size - 1
+            }
+            Log.d("ViewModel", "Previous segment. New index: ${_currentSegmentIndex.value}")
+        }
+    }
+
+    fun setSegmentIndex(index: Int) {
+        if (index in 0 until _processedSegments.value.size) {
+            _currentSegmentIndex.value = index
+            Log.d("ViewModel", "Set segment index to: $index")
+        }
+    }
 
     fun updateDetectionInfo(resultsCount: Int) {
         _detectedObjectsCount.value = resultsCount
