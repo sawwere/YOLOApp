@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
@@ -26,26 +27,62 @@ import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.sawwere.yoloapp.camera.presentation.CameraScreen
 import com.sawwere.yoloapp.camera.presentation.CameraScreenViewModel
 import com.sawwere.yoloapp.core.config.SaveConfig
+import com.sawwere.yoloapp.core.data.AppDatabase
+import com.sawwere.yoloapp.core.data.repository.AppRepository
 import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.image.DrawImages
 import com.sawwere.yoloapp.core.image.ImageProcessor
-import com.sawwere.yoloapp.core.repository.MediaStoreRepository
+import com.sawwere.yoloapp.core.data.repository.MediaStoreRepository
 import com.sawwere.yoloapp.core.system.VibrationComponent
+import com.sawwere.yoloapp.ui.main.MainViewModel
 import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.opencv.android.OpenCVLoader
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.max
@@ -57,7 +94,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     private lateinit var drawImages: DrawImages
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var vibrationComponent: VibrationComponent
-    private lateinit var imageProcessor: ImageProcessor
 
     private var camera: Camera? = null
     private var segmentedBitmap: Bitmap? by mutableStateOf(null)
@@ -69,7 +105,13 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     private lateinit var vibrator : Vibrator
 
     private lateinit var viewModel : CameraScreenViewModel
-    private val mediaStoreRepository = MediaStoreRepository()
+    private lateinit var mainViewModel: MainViewModel
+    private lateinit var mediaStoreRepository: MediaStoreRepository
+    private lateinit var appRepository: AppRepository
+    private var currentCategoryId: Long = 0
+
+    // Для навигации между экранами
+    private var showCategoriesScreen by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,7 +120,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             Log.i("MainActivity", "OpenCV loaded successfully")
         } else {
             Log.e("MainActivity", "OpenCV initialization failed!")
-            (Toast.makeText(this, "OpenCV initialization failed!", Toast.LENGTH_LONG)).show()
+            Toast.makeText(this, "OpenCV initialization failed!", Toast.LENGTH_LONG).show()
             return
         }
 
@@ -95,7 +137,9 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         drawImages = DrawImages(applicationContext)
         cameraExecutor = Executors.newSingleThreadExecutor()
         viewModel = CameraScreenViewModel()
-        imageProcessor = ImageProcessor()
+
+        // Инициализация репозиториев и ViewModel для работы с категориями и сохранением
+        initializeRepositoriesAndViewModels()
 
         detectionComponent = DetectionComponent(
             context = applicationContext,
@@ -111,106 +155,99 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
         setContent {
             YOLOAppTheme {
-                CameraScreen(
-                    viewModel = this.viewModel,
-                    segmentedBitmap = segmentedBitmap,
-                    onCaptureClick = {
-                        captureCurrentFrame()
-                        vibrationComponent.triggerHapticFeedback()
-                    }
-                )
+                if (showCategoriesScreen) {
+                    CategoriesScreenWrapper(
+                        mainViewModel = mainViewModel,
+                        onCategorySelected = { categoryId ->
+                            currentCategoryId = categoryId
+                            showCategoriesScreen = false
+                        },
+                        onAddCategory = { showAddCategoryDialog = true },
+                        onBack = { showCategoriesScreen = false }
+                    )
+                } else {
+                    // Показываем камеру
+                    CameraScreen(
+                        viewModel = viewModel,
+                        segmentedBitmap = segmentedBitmap,
+                        onCaptureClick = {
+                            if (currentCategoryId == 0L) {
+                                // Если категория не выбрана, показываем экран выбора
+                                showCategoriesScreen = true
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Сначала выберите категорию",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                captureCurrentFrame()
+                                vibrationComponent.triggerHapticFeedback()
+                            }
+                        }
+                    )
+                }
             }
         }
 
         checkPermission()
     }
 
-    private fun saveToGallery(bitmap: Bitmap) {
+    private fun initializeRepositoriesAndViewModels() {
+        // Инициализация репозиториев
+        mediaStoreRepository = MediaStoreRepository(applicationContext)
+        val database = AppDatabase.getDatabase(applicationContext)
+        appRepository = AppRepository(database.appDao(), mediaStoreRepository)
+
+        // Инициализация ViewModel
+        mainViewModel = MainViewModel(appRepository)
+
+        // Создаем категорию по умолчанию
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                // Убедимся, что у нас есть разрешение на запись
-                if (ContextCompat.checkSelfPermission(
-                        applicationContext,
-                        Manifest.permission.WRITE_EXTERNAL_STORAGE
-                    ) != PackageManager.PERMISSION_GRANTED &&
-                    Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-                ) {
-                    // Запросить разрешение, если нужно
-                    withContext(Dispatchers.Main) {
-                        ActivityCompat.requestPermissions(
-                            this@MainActivity,
-                            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                            REQUEST_WRITE_PERMISSION
-                        )
-                    }
-                    // Освобождаем bitmap, если не можем сохранить
-                    bitmap.recycle()
-                    return@launch
+                // Проверяем, есть ли уже категории
+                val categories = appRepository.getAllCategories().first()
+                if (categories.isEmpty()) {
+                    // Создаем категорию по умолчанию
+                    currentCategoryId = appRepository.insertCategory("Обнаруженные объекты")
+                } else {
+                    // Используем первую категорию
+                    currentCategoryId = categories.first().id
                 }
-
-                val contentValues = ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, "capture_${System.currentTimeMillis()}.jpg")
-                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/${SaveConfig.folderName}")
-                        put(MediaStore.Images.Media.IS_PENDING, 1)
-                    } else {
-                        put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
-                        put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
-                    }
-                }
-
-                val resolver = applicationContext.contentResolver
-                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-
-                uri?.let {
-                    try {
-                        resolver.openOutputStream(it)?.use { outputStream ->
-                            if (bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                    contentValues.clear()
-                                    contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-                                    resolver.update(uri, contentValues, null, null)
-                                }
-
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(
-                                        this@MainActivity,
-                                        "Изображение сохранено в галерею",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    Log.d("GallerySave", "Image saved successfully: $uri")
-                                }
-                            } else {
-                                throw IOException("Failed to compress bitmap")
-                            }
-                        } ?: throw IOException("Failed to open output stream")
-                    } catch (e: Exception) {
-                        // Удаляем запись если произошла ошибка
-                        resolver.delete(uri, null, null)
-                        throw e
-                    } finally {
-                        // Освобождаем bitmap после сохранения
-                        bitmap.recycle()
-                    }
-                } ?: run {
-                    bitmap.recycle()
-                    throw IOException("Failed to create new MediaStore record")
-                }
-
             } catch (e: Exception) {
-                Log.e("GallerySave", "Error saving image: ${e.message}", e)
-                // Освобождаем bitmap при ошибке
-                bitmap.recycle()
-
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Ошибка сохранения: ${e.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+                Log.e("MainActivity", "Error initializing categories: ${e.message}")
             }
+        }
+    }
+
+
+    private suspend fun saveImageWithMetadata(bitmap: Bitmap, description: String): Uri? {
+        return try {
+            // Получаем категорию для сохранения
+            val category = appRepository.getCategoryById(currentCategoryId)
+            if (category == null) {
+                Log.e("SaveImage", "Category not found: $currentCategoryId")
+                return null
+            }
+
+            // Сохраняем изображение через MediaStoreRepository
+            val uri = mediaStoreRepository.saveImageToPublicStorage(
+                bitmap = bitmap,
+                categoryName = category.name,
+                description = description
+            )
+
+            if (uri != null) {
+                // Сохраняем информацию о фото в базу данных
+                appRepository.insertPhoto(currentCategoryId, bitmap, description)
+                Log.d("SaveImage", "Image saved successfully: $uri")
+            } else {
+                Log.e("SaveImage", "Failed to save image to MediaStore")
+            }
+
+            uri
+        } catch (e: Exception) {
+            Log.e("SaveImage", "Error saving image: ${e.message}", e)
+            null
         }
     }
 
@@ -294,6 +331,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
         // Сохраняем текущие обнаруженные объекты и оригинальное изображение
         capturedOriginalBitmap = original
+        val detectionCount = capturedDetections.size
 
         // Создаем комбинированное изображение для сохранения в галерею
         val bitmapToSave = if (segmentedBitmap != null) {
@@ -311,8 +349,30 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             original.copy(original.config!!, true)
         }
 
-        // Сохраняем в галерею (передаем bitmap и управление им)
-        saveToGallery(bitmapToSave)
+        // Сохраняем в галерею с использованием MediaStoreRepository
+        lifecycleScope.launch(Dispatchers.IO) {
+            val description = "Обнаружено объектов: $detectionCount"
+            val uri = saveImageWithMetadata(bitmapToSave, description)
+
+            withContext(Dispatchers.Main) {
+                if (uri != null) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Изображение сохранено в категорию",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Ошибка сохранения изображения",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+
+            // Освобождаем bitmap после сохранения
+            bitmapToSave.recycle()
+        }
 
         // Обрабатываем захваченные сегменты
         processCapturedSegments()
@@ -355,6 +415,9 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                                     viewModel.addProcessedSegment(processedBitmap)
                                     Log.d("SegmentDebug", "Added segment $index to ViewModel")
                                 }
+
+                                // Сохраняем отдельный сегмент как отдельное фото
+                                saveIndividualSegment(processedBitmap, index)
                             } else {
                                 Log.w("SegmentDebug", "Processed bitmap is null for object $index")
                             }
@@ -401,6 +464,18 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         }
     }
 
+    private suspend fun saveIndividualSegment(bitmap: Bitmap, index: Int) {
+        try {
+            val category = appRepository.getCategoryById(currentCategoryId)
+            if (category != null) {
+                val description = "Сегмент объекта $index из категории ${category.name}"
+                saveImageWithMetadata(bitmap, description)
+            }
+        } catch (e: Exception) {
+            Log.e("SaveSegment", "Error saving segment $index: ${e.message}")
+        }
+    }
+
     override fun onDetect(
         interfaceTime: Long,
         results: List<DetectionComponent.Detection>,
@@ -417,7 +492,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         viewModel.updateDetectionInfo(results.size)
 
         // Создаем сегментированное изображение для отображения в реальном времени
-        segmentedBitmap = if (results.isEmpty()) {
+        segmentedBitmap = if (results.isEmpty() || originalBitmap == null) {
             null
         } else {
             drawImages(
@@ -428,7 +503,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         }
 
         // Сохраняем текущие детекции для возможного захвата
-        // (но обработку будем делать только при нажатии на кнопку)
         capturedDetections = results
     }
 
@@ -484,12 +558,14 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             null
         }
     }
+
     private fun processSingleSegment(segmentBitmap: Bitmap): Bitmap? {
         return try {
-            imageProcessor.processDocumentImageEnhanced(segmentBitmap)
+            // Здесь можно добавить дополнительную обработку сегментов, если нужно
+            segmentBitmap
         } catch (e: Exception) {
             Log.e("ImageProcessor", "Error in segment processing: ${e.message}")
-            return null
+            null
         }
     }
 
@@ -542,3 +618,125 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         private const val REQUEST_WRITE_PERMISSION = 101
     }
 }
+
+// Компонент для отображения экрана категорий в Compose
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CategoriesScreenWrapper(
+    mainViewModel: MainViewModel,
+    onCategorySelected: (Long) -> Unit,
+    onAddCategory: () -> Unit,
+    onBack: () -> Unit
+) {
+    val categories by mainViewModel.allCategories.collectAsState(emptyList())
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    // Здесь должен быть ваш компосейбл экрана категорий
+    // Для примера я создам простой экран
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Выберите категорию") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Назад"
+                        )
+                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { showAddDialog = true }
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Добавить категорию"
+                )
+            }
+        }
+    ) { padding ->
+        if (categories.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center
+            ) {
+               Text("Нет категорий. Добавьте первую!")
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.padding(padding)
+            ) {
+                items(categories) { category ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                            .clickable { onCategorySelected(category.id) },
+                        elevation = 4.dp
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp)
+                        ) {
+                            Text(
+                                text = category.name,
+                                style = MaterialTheme.typography.h6
+                            )
+                            Text(
+                                text = "Создано: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(
+                                    Date(category.createdAt)
+                                )}",
+                                style = MaterialTheme.typography.caption
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Диалог добавления категории
+    if (showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = { Text("Новая категория") },
+            text = {
+                var categoryName by remember { mutableStateOf("") }
+
+                Column {
+                    TextField(
+                        value = categoryName,
+                        onValueChange = { categoryName = it },
+                        label = { Text("Название категории") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        // Здесь должна быть логика добавления категории
+                        showAddDialog = false
+                    }
+                ) {
+                    Text("Добавить")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showAddDialog = false }
+                ) {
+                    Text("Отмена")
+                }
+            }
+        )
+    }
+}
+
+
+var showAddCategoryDialog by mutableStateOf(false)
