@@ -15,26 +15,26 @@ import kotlinx.coroutines.flow.Flow
 interface AppDao {
     // Category operations
     @Insert
-    suspend fun insertCategory(category: Category): Long
+    fun insertCategory(category: Category): Long
 
     @Query("SELECT * FROM categories ORDER BY created_at DESC")
     fun getAllCategories(): Flow<List<Category>>
 
     @Query("SELECT * FROM categories WHERE id = :categoryId")
-    suspend fun getCategoryById(categoryId: Long): Category?
+    fun getCategoryById(categoryId: Long): Category?
 
     @Delete
-    suspend fun deleteCategory(category: Category)
+    fun deleteCategory(category: Category)
 
     // Photo operations
     @Insert
-    suspend fun insertPhoto(photo: Photo): Long
+    fun insertPhoto(photo: Photo): Long
 
     @Update
-    suspend fun updatePhoto(photo: Photo)
+    fun updatePhoto(photo: Photo)
 
     @Query("SELECT * FROM photos WHERE id = :photoId")
-    suspend fun getPhotoById(photoId: Long): Photo?
+    fun getPhotoById(photoId: Long): Photo?
 
     @Transaction
     @Query("SELECT * FROM categories WHERE id = :categoryId")
@@ -44,7 +44,7 @@ interface AppDao {
     fun getPhotosByCategory(categoryId: Long): Flow<List<Photo>>
 
     @Delete
-    suspend fun deletePhoto(photo: Photo)
+    fun deletePhoto(photo: Photo)
 
     // Для галереи - получаем все категории с их первым фото для превью
     @Transaction
@@ -53,5 +53,8 @@ interface AppDao {
 
     // Получаем количество фото в категории
     @Query("SELECT COUNT(*) FROM photos WHERE category_id = :categoryId")
-    suspend fun getPhotoCountInCategory(categoryId: Long): Int
+    fun getPhotoCountInCategory(categoryId: Long): Int
+
+    @Query("SELECT * FROM photos WHERE category_id = :categoryId ORDER BY created_at DESC LIMIT 1")
+    fun getLatestPhotoInCategory(categoryId: Long): Photo?
 }

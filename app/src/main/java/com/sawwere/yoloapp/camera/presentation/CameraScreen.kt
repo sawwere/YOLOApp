@@ -67,9 +67,10 @@ import com.sawwere.yoloapp.MainActivity
 
 @Composable
 fun CameraScreen(
+    onBackClick: () -> Unit,
+    onCaptureClick: () -> Unit,
     viewModel: CameraScreenViewModel,
-    segmentedBitmap: Bitmap?,
-    onCaptureClick: () -> Unit
+    segmentedBitmap: Bitmap?
 ) {
     val context = LocalContext.current
 

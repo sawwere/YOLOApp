@@ -1,7 +1,6 @@
 package com.sawwere.yoloapp
 
 import android.Manifest
-import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -11,7 +10,6 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -27,91 +25,59 @@ import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TextField
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.sawwere.yoloapp.camera.presentation.CameraScreen
 import com.sawwere.yoloapp.camera.presentation.CameraScreenViewModel
-import com.sawwere.yoloapp.core.config.SaveConfig
 import com.sawwere.yoloapp.core.data.AppDatabase
 import com.sawwere.yoloapp.core.data.repository.AppRepository
+import com.sawwere.yoloapp.core.data.repository.MediaStoreRepository
 import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.image.DrawImages
-import com.sawwere.yoloapp.core.image.ImageProcessor
-import com.sawwere.yoloapp.core.data.repository.MediaStoreRepository
 import com.sawwere.yoloapp.core.system.VibrationComponent
-import com.sawwere.yoloapp.ui.main.MainViewModel
+import com.sawwere.yoloapp.ui.category.detail.CategoryDetailScreen
+import com.sawwere.yoloapp.ui.category.list.CategoriesListScreen
 import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.opencv.android.OpenCVLoader
-import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.min
 
 class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentationListener {
+    // Состояния навигации
+    enum class Screen {
+        CATEGORIES_LIST,
+        CATEGORY_DETAIL,
+        CAMERA
+    }
 
+    private var currentScreen by mutableStateOf(Screen.CATEGORIES_LIST)
+    private var selectedCategoryId by mutableStateOf(0L)
+
+    // Camera components
     private lateinit var detectionComponent: DetectionComponent
     private lateinit var drawImages: DrawImages
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var vibrationComponent: VibrationComponent
-
     private var camera: Camera? = null
     private var segmentedBitmap: Bitmap? by mutableStateOf(null)
     private var originalBitmap: Bitmap? by mutableStateOf(null)
-
     private var capturedDetections: List<DetectionComponent.Detection> by mutableStateOf(emptyList())
     private var capturedOriginalBitmap: Bitmap? by mutableStateOf(null)
+    private lateinit var vibrator: Vibrator
+    private lateinit var viewModel: CameraScreenViewModel
 
-    private lateinit var vibrator : Vibrator
-
-    private lateinit var viewModel : CameraScreenViewModel
-    private lateinit var mainViewModel: MainViewModel
+    // Repositories
     private lateinit var mediaStoreRepository: MediaStoreRepository
     private lateinit var appRepository: AppRepository
-    private var currentCategoryId: Long = 0
-
-    // Для навигации между экранами
-    private var showCategoriesScreen by mutableStateOf(false)
+    private var currentCategoryIdForCamera by mutableStateOf(0L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -155,36 +121,57 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
         setContent {
             YOLOAppTheme {
-                if (showCategoriesScreen) {
-                    CategoriesScreenWrapper(
-                        mainViewModel = mainViewModel,
-                        onCategorySelected = { categoryId ->
-                            currentCategoryId = categoryId
-                            showCategoriesScreen = false
-                        },
-                        onAddCategory = { showAddCategoryDialog = true },
-                        onBack = { showCategoriesScreen = false }
-                    )
-                } else {
-                    // Показываем камеру
-                    CameraScreen(
-                        viewModel = viewModel,
-                        segmentedBitmap = segmentedBitmap,
-                        onCaptureClick = {
-                            if (currentCategoryId == 0L) {
-                                // Если категория не выбрана, показываем экран выбора
-                                showCategoriesScreen = true
+                // Навигация между экранами
+                when (currentScreen) {
+                    Screen.CATEGORIES_LIST -> {
+                        CategoriesListScreen(
+                            onCategoryClick = { categoryId ->
+                                selectedCategoryId = categoryId
+                                currentScreen = Screen.CATEGORY_DETAIL
+                                println("Переход к категории: $categoryId")
+                            }
+                        )
+                    }
+
+                    Screen.CATEGORY_DETAIL -> {
+                        CategoryDetailScreen(
+                            categoryId = selectedCategoryId,
+                            onBackClick = {
+                                println("Назад к списку категорий")
+                                currentScreen = Screen.CATEGORIES_LIST
+                            },
+                            onAddPhotoClick = {
+                                println("Добавить фото в категорию $selectedCategoryId")
+                                currentCategoryIdForCamera = selectedCategoryId
+                                currentScreen = Screen.CAMERA
+                            },
+                            onCheckClick = {
+                                println("Проверка категории $selectedCategoryId")
+                                // Можно добавить дополнительную логику проверки
                                 Toast.makeText(
                                     this@MainActivity,
-                                    "Сначала выберите категорию",
+                                    "Запуск проверки...",
                                     Toast.LENGTH_SHORT
                                 ).show()
-                            } else {
+                            }
+                        )
+                    }
+
+                    Screen.CAMERA -> {
+                        CameraScreen(
+                            onBackClick = {
+                                println("Назад из камеры к категории")
+                                currentScreen = Screen.CATEGORY_DETAIL
+                            },
+                            onCaptureClick = {
+                                println("Съемка фото для категории $currentCategoryIdForCamera")
                                 captureCurrentFrame()
                                 vibrationComponent.triggerHapticFeedback()
-                            }
-                        }
-                    )
+                            },
+                            viewModel = viewModel,
+                            segmentedBitmap = segmentedBitmap
+                        )
+                    }
                 }
             }
         }
@@ -193,43 +180,20 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     }
 
     private fun initializeRepositoriesAndViewModels() {
-        // Инициализация репозиториев
         mediaStoreRepository = MediaStoreRepository(applicationContext)
         val database = AppDatabase.getDatabase(applicationContext)
         appRepository = AppRepository(database.appDao(), mediaStoreRepository)
-
-        // Инициализация ViewModel
-        mainViewModel = MainViewModel(appRepository)
-
-        // Создаем категорию по умолчанию
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                // Проверяем, есть ли уже категории
-                val categories = appRepository.getAllCategories().first()
-                if (categories.isEmpty()) {
-                    // Создаем категорию по умолчанию
-                    currentCategoryId = appRepository.insertCategory("Обнаруженные объекты")
-                } else {
-                    // Используем первую категорию
-                    currentCategoryId = categories.first().id
-                }
-            } catch (e: Exception) {
-                Log.e("MainActivity", "Error initializing categories: ${e.message}")
-            }
-        }
     }
 
 
     private suspend fun saveImageWithMetadata(bitmap: Bitmap, description: String): Uri? {
         return try {
-            // Получаем категорию для сохранения
-            val category = appRepository.getCategoryById(currentCategoryId)
+            val category = appRepository.getCategoryById(currentCategoryIdForCamera)
             if (category == null) {
-                Log.e("SaveImage", "Category not found: $currentCategoryId")
+                Log.e("SaveImage", "Category not found: $currentCategoryIdForCamera")
                 return null
             }
 
-            // Сохраняем изображение через MediaStoreRepository
             val uri = mediaStoreRepository.saveImageToPublicStorage(
                 bitmap = bitmap,
                 categoryName = category.name,
@@ -237,11 +201,8 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             )
 
             if (uri != null) {
-                // Сохраняем информацию о фото в базу данных
-                appRepository.insertPhoto(currentCategoryId, bitmap, description)
+                appRepository.insertPhoto(currentCategoryIdForCamera, bitmap, description)
                 Log.d("SaveImage", "Image saved successfully: $uri")
-            } else {
-                Log.e("SaveImage", "Failed to save image to MediaStore")
             }
 
             uri
@@ -466,7 +427,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
     private suspend fun saveIndividualSegment(bitmap: Bitmap, index: Int) {
         try {
-            val category = appRepository.getCategoryById(currentCategoryId)
+            val category = appRepository.getCategoryById(currentCategoryIdForCamera)
             if (category != null) {
                 val description = "Сегмент объекта $index из категории ${category.name}"
                 saveImageWithMetadata(bitmap, description)
@@ -583,6 +544,23 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         cameraExecutor.shutdown()
     }
 
+    override fun onBackPressed() {
+        // Обработка системной кнопки "Назад"
+        when (currentScreen) {
+            Screen.CATEGORIES_LIST -> {
+                super.onBackPressed() // Выход из приложения
+            }
+            Screen.CATEGORY_DETAIL -> {
+                println("Назад из категории в список")
+                currentScreen = Screen.CATEGORIES_LIST
+            }
+            Screen.CAMERA -> {
+                println("Назад из камеры в категорию")
+                currentScreen = Screen.CATEGORY_DETAIL
+            }
+        }
+    }
+
     inner class ImageAnalyzer : ImageAnalysis.Analyzer {
         override fun analyze(imageProxy: ImageProxy) {
             val bitmapBuffer = Bitmap.createBitmap(
@@ -618,125 +596,3 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         private const val REQUEST_WRITE_PERMISSION = 101
     }
 }
-
-// Компонент для отображения экрана категорий в Compose
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun CategoriesScreenWrapper(
-    mainViewModel: MainViewModel,
-    onCategorySelected: (Long) -> Unit,
-    onAddCategory: () -> Unit,
-    onBack: () -> Unit
-) {
-    val categories by mainViewModel.allCategories.collectAsState(emptyList())
-    var showAddDialog by remember { mutableStateOf(false) }
-
-    // Здесь должен быть ваш компосейбл экрана категорий
-    // Для примера я создам простой экран
-
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Выберите категорию") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад"
-                        )
-                    }
-                }
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true }
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Добавить категорию"
-                )
-            }
-        }
-    ) { padding ->
-        if (categories.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-               Text("Нет категорий. Добавьте первую!")
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.padding(padding)
-            ) {
-                items(categories) { category ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(8.dp)
-                            .clickable { onCategorySelected(category.id) },
-                        elevation = 4.dp
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp)
-                        ) {
-                            Text(
-                                text = category.name,
-                                style = MaterialTheme.typography.h6
-                            )
-                            Text(
-                                text = "Создано: ${SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(
-                                    Date(category.createdAt)
-                                )}",
-                                style = MaterialTheme.typography.caption
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Диалог добавления категории
-    if (showAddDialog) {
-        AlertDialog(
-            onDismissRequest = { showAddDialog = false },
-            title = { Text("Новая категория") },
-            text = {
-                var categoryName by remember { mutableStateOf("") }
-
-                Column {
-                    TextField(
-                        value = categoryName,
-                        onValueChange = { categoryName = it },
-                        label = { Text("Название категории") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        // Здесь должна быть логика добавления категории
-                        showAddDialog = false
-                    }
-                ) {
-                    Text("Добавить")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = { showAddDialog = false }
-                ) {
-                    Text("Отмена")
-                }
-            }
-        )
-    }
-}
-
-
-var showAddCategoryDialog by mutableStateOf(false)
