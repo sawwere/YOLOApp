@@ -1,16 +1,15 @@
 package com.sawwere.yoloapp
 
 import android.Manifest
-import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -29,47 +28,56 @@ import androidx.camera.view.PreviewView
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.sawwere.yoloapp.camera.presentation.CameraScreen
-import com.sawwere.yoloapp.camera.presentation.CameraScreenViewModel
-import com.sawwere.yoloapp.core.config.SaveConfig
+import com.sawwere.yoloapp.ui.camera.CameraScreen
+import com.sawwere.yoloapp.ui.camera.CameraScreenViewModel
+import com.sawwere.yoloapp.core.data.AppDatabase
+import com.sawwere.yoloapp.core.data.repository.AppRepository
+import com.sawwere.yoloapp.core.data.repository.MediaStoreRepository
 import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.image.DrawImages
-import com.sawwere.yoloapp.core.image.ImageProcessor
-import com.sawwere.yoloapp.core.repository.MediaStoreRepository
 import com.sawwere.yoloapp.core.system.VibrationComponent
+import com.sawwere.yoloapp.ui.category.detail.CategoryDetailScreen
+import com.sawwere.yoloapp.ui.category.list.CategoriesListScreen
 import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.opencv.android.OpenCVLoader
-import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import kotlin.math.max
 import kotlin.math.min
 
 class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentationListener {
+    // Состояния навигации
+    enum class Screen {
+        CATEGORIES_LIST,
+        CATEGORY_DETAIL,
+        CAMERA
+    }
 
+    private var currentScreen by mutableStateOf(Screen.CATEGORIES_LIST)
+    private var selectedCategoryId by mutableStateOf(0L)
+
+    // Camera components
     private lateinit var detectionComponent: DetectionComponent
     private lateinit var drawImages: DrawImages
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var vibrationComponent: VibrationComponent
-    private lateinit var imageProcessor: ImageProcessor
-
     private var camera: Camera? = null
     private var segmentedBitmap: Bitmap? by mutableStateOf(null)
     private var originalBitmap: Bitmap? by mutableStateOf(null)
-
     private var capturedDetections: List<DetectionComponent.Detection> by mutableStateOf(emptyList())
     private var capturedOriginalBitmap: Bitmap? by mutableStateOf(null)
+    private lateinit var vibrator: Vibrator
+    private lateinit var viewModel: CameraScreenViewModel
 
-    private lateinit var vibrator : Vibrator
-
-    private lateinit var viewModel : CameraScreenViewModel
-    private val mediaStoreRepository = MediaStoreRepository()
+    // Repositories
+    private lateinit var mediaStoreRepository: MediaStoreRepository
+    private lateinit var appRepository: AppRepository
+    private var currentCategoryIdForCamera by mutableStateOf(0L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,7 +86,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             Log.i("MainActivity", "OpenCV loaded successfully")
         } else {
             Log.e("MainActivity", "OpenCV initialization failed!")
-            (Toast.makeText(this, "OpenCV initialization failed!", Toast.LENGTH_LONG)).show()
+            Toast.makeText(this, "OpenCV initialization failed!", Toast.LENGTH_LONG).show()
             return
         }
 
@@ -95,7 +103,9 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         drawImages = DrawImages(applicationContext)
         cameraExecutor = Executors.newSingleThreadExecutor()
         viewModel = CameraScreenViewModel()
-        imageProcessor = ImageProcessor()
+
+        // Инициализация репозиториев и ViewModel для работы с категориями и сохранением
+        initializeRepositoriesAndViewModels()
 
         detectionComponent = DetectionComponent(
             context = applicationContext,
@@ -111,106 +121,88 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
         setContent {
             YOLOAppTheme {
-                CameraScreen(
-                    viewModel = this.viewModel,
-                    segmentedBitmap = segmentedBitmap,
-                    onCaptureClick = {
-                        captureCurrentFrame()
-                        vibrationComponent.triggerHapticFeedback()
+                // Навигация между экранами
+                when (currentScreen) {
+                    Screen.CATEGORIES_LIST -> {
+                        CategoriesListScreen(
+                            onCategoryClick = { categoryId ->
+                                selectedCategoryId = categoryId
+                                currentScreen = Screen.CATEGORY_DETAIL
+                            }
+                        )
                     }
-                )
+
+                    Screen.CATEGORY_DETAIL -> {
+                        CategoryDetailScreen(
+                            categoryId = selectedCategoryId,
+                            onBackClick = {
+                                currentScreen = Screen.CATEGORIES_LIST
+                            },
+                            onAddPhotoClick = {
+                                currentCategoryIdForCamera = selectedCategoryId
+                                currentScreen = Screen.CAMERA
+                            },
+                            onCheckClick = {
+                                // Можно добавить дополнительную логику проверки
+                                Toast.makeText(
+                                    this@MainActivity,
+                                    "Запуск проверки...",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        )
+                    }
+
+                    Screen.CAMERA -> {
+                        CameraScreen(
+                            onBackClick = {
+                                currentScreen = Screen.CATEGORY_DETAIL
+                            },
+                            onCaptureClick = {
+                                captureCurrentFrame()
+                                vibrationComponent.triggerHapticFeedback()
+                            },
+                            viewModel = viewModel,
+                            segmentedBitmap = segmentedBitmap
+                        )
+                    }
+                }
             }
         }
 
         checkPermission()
     }
 
-    private fun saveToGallery(bitmap: Bitmap) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                // Убедимся, что у нас есть разрешение на запись
-                if (ContextCompat.checkSelfPermission(
-                        applicationContext,
-                        Manifest.permission.WRITE_EXTERNAL_STORAGE
-                    ) != PackageManager.PERMISSION_GRANTED &&
-                    Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
-                ) {
-                    // Запросить разрешение, если нужно
-                    withContext(Dispatchers.Main) {
-                        ActivityCompat.requestPermissions(
-                            this@MainActivity,
-                            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
-                            REQUEST_WRITE_PERMISSION
-                        )
-                    }
-                    // Освобождаем bitmap, если не можем сохранить
-                    bitmap.recycle()
-                    return@launch
-                }
+    private fun initializeRepositoriesAndViewModels() {
+        mediaStoreRepository = MediaStoreRepository(applicationContext)
+        val database = AppDatabase.getDatabase(applicationContext)
+        appRepository = AppRepository(database.appDao(), mediaStoreRepository)
+    }
 
-                val contentValues = ContentValues().apply {
-                    put(MediaStore.Images.Media.DISPLAY_NAME, "capture_${System.currentTimeMillis()}.jpg")
-                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/${SaveConfig.folderName}")
-                        put(MediaStore.Images.Media.IS_PENDING, 1)
-                    } else {
-                        put(MediaStore.Images.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
-                        put(MediaStore.Images.Media.DATE_TAKEN, System.currentTimeMillis())
-                    }
-                }
 
-                val resolver = applicationContext.contentResolver
-                val uri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-
-                uri?.let {
-                    try {
-                        resolver.openOutputStream(it)?.use { outputStream ->
-                            if (bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)) {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                                    contentValues.clear()
-                                    contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-                                    resolver.update(uri, contentValues, null, null)
-                                }
-
-                                withContext(Dispatchers.Main) {
-                                    Toast.makeText(
-                                        this@MainActivity,
-                                        "Изображение сохранено в галерею",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
-                                    Log.d("GallerySave", "Image saved successfully: $uri")
-                                }
-                            } else {
-                                throw IOException("Failed to compress bitmap")
-                            }
-                        } ?: throw IOException("Failed to open output stream")
-                    } catch (e: Exception) {
-                        // Удаляем запись если произошла ошибка
-                        resolver.delete(uri, null, null)
-                        throw e
-                    } finally {
-                        // Освобождаем bitmap после сохранения
-                        bitmap.recycle()
-                    }
-                } ?: run {
-                    bitmap.recycle()
-                    throw IOException("Failed to create new MediaStore record")
-                }
-
-            } catch (e: Exception) {
-                Log.e("GallerySave", "Error saving image: ${e.message}", e)
-                // Освобождаем bitmap при ошибке
-                bitmap.recycle()
-
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Ошибка сохранения: ${e.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
+    private suspend fun saveImageWithMetadata(bitmap: Bitmap, description: String): Uri? {
+        return try {
+            val category = appRepository.getCategoryById(currentCategoryIdForCamera)
+            if (category == null) {
+                Log.e("SaveImage", "Category not found: $currentCategoryIdForCamera")
+                return null
             }
+
+            val uri = mediaStoreRepository.saveImageToPublicStorage(
+                bitmap = bitmap,
+                categoryName = category.name,
+                description = description
+            )
+
+            if (uri != null) {
+                appRepository.insertPhoto(currentCategoryIdForCamera, bitmap, description)
+                Log.d("SaveImage", "Image saved successfully: $uri")
+            }
+
+            uri
+        } catch (e: Exception) {
+            Log.e("SaveImage", "Error saving image: ${e.message}", e)
+            null
         }
     }
 
@@ -294,6 +286,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
         // Сохраняем текущие обнаруженные объекты и оригинальное изображение
         capturedOriginalBitmap = original
+        val detectionCount = capturedDetections.size
 
         // Создаем комбинированное изображение для сохранения в галерею
         val bitmapToSave = if (segmentedBitmap != null) {
@@ -311,8 +304,30 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             original.copy(original.config!!, true)
         }
 
-        // Сохраняем в галерею (передаем bitmap и управление им)
-        saveToGallery(bitmapToSave)
+        // Сохраняем в галерею с использованием MediaStoreRepository
+        lifecycleScope.launch(Dispatchers.IO) {
+            val description = "Обнаружено объектов: $detectionCount"
+            val uri = saveImageWithMetadata(bitmapToSave, description)
+
+            withContext(Dispatchers.Main) {
+                if (uri != null) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Изображение сохранено в категорию",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Ошибка сохранения изображения",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+
+            // Освобождаем bitmap после сохранения
+            bitmapToSave.recycle()
+        }
 
         // Обрабатываем захваченные сегменты
         processCapturedSegments()
@@ -355,6 +370,9 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                                     viewModel.addProcessedSegment(processedBitmap)
                                     Log.d("SegmentDebug", "Added segment $index to ViewModel")
                                 }
+
+                                // Сохраняем отдельный сегмент как отдельное фото
+                                saveIndividualSegment(processedBitmap, index)
                             } else {
                                 Log.w("SegmentDebug", "Processed bitmap is null for object $index")
                             }
@@ -401,6 +419,18 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         }
     }
 
+    private suspend fun saveIndividualSegment(bitmap: Bitmap, index: Int) {
+        try {
+            val category = appRepository.getCategoryById(currentCategoryIdForCamera)
+            if (category != null) {
+                val description = "Сегмент объекта $index из категории ${category.name}"
+                saveImageWithMetadata(bitmap, description)
+            }
+        } catch (e: Exception) {
+            Log.e("SaveSegment", "Error saving segment $index: ${e.message}")
+        }
+    }
+
     override fun onDetect(
         interfaceTime: Long,
         results: List<DetectionComponent.Detection>,
@@ -417,7 +447,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         viewModel.updateDetectionInfo(results.size)
 
         // Создаем сегментированное изображение для отображения в реальном времени
-        segmentedBitmap = if (results.isEmpty()) {
+        segmentedBitmap = if (results.isEmpty() || originalBitmap == null) {
             null
         } else {
             drawImages(
@@ -428,7 +458,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         }
 
         // Сохраняем текущие детекции для возможного захвата
-        // (но обработку будем делать только при нажатии на кнопку)
         capturedDetections = results
     }
 
@@ -484,12 +513,14 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             null
         }
     }
+
     private fun processSingleSegment(segmentBitmap: Bitmap): Bitmap? {
         return try {
-            imageProcessor.processDocumentImageEnhanced(segmentBitmap)
+            // Здесь можно добавить дополнительную обработку сегментов, если нужно
+            segmentBitmap
         } catch (e: Exception) {
             Log.e("ImageProcessor", "Error in segment processing: ${e.message}")
-            return null
+            null
         }
     }
 
@@ -505,6 +536,21 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         super.onDestroy()
         detectionComponent.close()
         cameraExecutor.shutdown()
+    }
+
+    override fun onBackPressed() {
+        // Обработка системной кнопки "Назад"
+        when (currentScreen) {
+            Screen.CATEGORIES_LIST -> {
+                super.onBackPressed() // Выход из приложения
+            }
+            Screen.CATEGORY_DETAIL -> {
+                currentScreen = Screen.CATEGORIES_LIST
+            }
+            Screen.CAMERA -> {
+                currentScreen = Screen.CATEGORY_DETAIL
+            }
+        }
     }
 
     inner class ImageAnalyzer : ImageAnalysis.Analyzer {

@@ -1,4 +1,4 @@
-package com.sawwere.yoloapp.camera.presentation
+package com.sawwere.yoloapp.ui.camera
 
 import android.graphics.Bitmap
 import android.util.Log
