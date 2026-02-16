@@ -1,7 +1,6 @@
-package com.sawwere.yoloapp.camera.presentation
+package com.sawwere.yoloapp.ui.camera
 
 import android.graphics.Bitmap
-import android.util.Log
 import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
@@ -27,15 +26,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -227,7 +225,7 @@ fun CameraScreen(
                             enabled = processedSegments.value.size > 1
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.ArrowBack,
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Previous Segment",
                                 tint = if (processedSegments.value.size > 1) Color.White else Color.Gray,
                                 modifier = Modifier.size(20.dp)

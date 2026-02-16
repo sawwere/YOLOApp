@@ -30,8 +30,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.sawwere.yoloapp.camera.presentation.CameraScreen
-import com.sawwere.yoloapp.camera.presentation.CameraScreenViewModel
+import com.sawwere.yoloapp.ui.camera.CameraScreen
+import com.sawwere.yoloapp.ui.camera.CameraScreenViewModel
 import com.sawwere.yoloapp.core.data.AppDatabase
 import com.sawwere.yoloapp.core.data.repository.AppRepository
 import com.sawwere.yoloapp.core.data.repository.MediaStoreRepository
@@ -128,7 +128,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                             onCategoryClick = { categoryId ->
                                 selectedCategoryId = categoryId
                                 currentScreen = Screen.CATEGORY_DETAIL
-                                println("Переход к категории: $categoryId")
                             }
                         )
                     }
@@ -137,16 +136,13 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                         CategoryDetailScreen(
                             categoryId = selectedCategoryId,
                             onBackClick = {
-                                println("Назад к списку категорий")
                                 currentScreen = Screen.CATEGORIES_LIST
                             },
                             onAddPhotoClick = {
-                                println("Добавить фото в категорию $selectedCategoryId")
                                 currentCategoryIdForCamera = selectedCategoryId
                                 currentScreen = Screen.CAMERA
                             },
                             onCheckClick = {
-                                println("Проверка категории $selectedCategoryId")
                                 // Можно добавить дополнительную логику проверки
                                 Toast.makeText(
                                     this@MainActivity,
@@ -160,11 +156,9 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                     Screen.CAMERA -> {
                         CameraScreen(
                             onBackClick = {
-                                println("Назад из камеры к категории")
                                 currentScreen = Screen.CATEGORY_DETAIL
                             },
                             onCaptureClick = {
-                                println("Съемка фото для категории $currentCategoryIdForCamera")
                                 captureCurrentFrame()
                                 vibrationComponent.triggerHapticFeedback()
                             },
@@ -551,11 +545,9 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                 super.onBackPressed() // Выход из приложения
             }
             Screen.CATEGORY_DETAIL -> {
-                println("Назад из категории в список")
                 currentScreen = Screen.CATEGORIES_LIST
             }
             Screen.CAMERA -> {
-                println("Назад из камеры в категорию")
                 currentScreen = Screen.CATEGORY_DETAIL
             }
         }

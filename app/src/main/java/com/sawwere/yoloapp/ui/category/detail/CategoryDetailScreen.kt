@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,12 +20,17 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,6 +39,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -46,19 +53,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sawwere.yoloapp.YOLOApp
+import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.Photo
-import com.sawwere.yoloapp.ui.MainViewModelFactory
-import com.sawwere.yoloapp.ui.main.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,16 +75,18 @@ fun CategoryDetailScreen(
     onBackClick: () -> Unit,
     onAddPhotoClick: () -> Unit,
     onCheckClick: () -> Unit,
-    viewModel: MainViewModel = viewModel(
-        factory = MainViewModelFactory(
-            (LocalContext.current.applicationContext as YOLOApp)
-                .appContainer.appRepository
+    viewModel: CategoryDetailScreenViewModel = viewModel(
+        factory = CategoryDetailScreenViewModel.provideFactory(
+            categoryId,
+            (LocalContext.current.applicationContext as YOLOApp).appContainer.appRepository
         )
     )
 ) {
-    val categoryWithPhotos by viewModel.getCategoryWithPhotos(categoryId).collectAsState(null)
+    val categoryWithPhotos by viewModel.categoryWithPhotos.collectAsState()
     val category = categoryWithPhotos?.category
     val photos = categoryWithPhotos?.photos ?: emptyList()
+
+    var photoToDelete by remember { mutableStateOf<Photo?>(null) }
 
     Scaffold(
         topBar = {
@@ -111,7 +121,6 @@ fun CategoryDetailScreen(
             ) {
                 FloatingActionButton(
                     onClick = {
-                        println("Кнопка 'Проверка' нажата")
                         onCheckClick()
                     },
                     modifier = Modifier.size(56.dp),
@@ -127,7 +136,6 @@ fun CategoryDetailScreen(
 
                 FloatingActionButton(
                     onClick = {
-                        println("Кнопка 'Добавить фото' нажата")
                         onAddPhotoClick()
                     },
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -159,15 +167,26 @@ fun CategoryDetailScreen(
                 onPhotoClick = { photo ->
                     println("Нажата фотография: ${photo.fileName}")
                     // Здесь можно открыть полноэкранный просмотр
-                }
+                },
+                onPhotoDelete = { photo -> photoToDelete = photo } // если добавили удаление
             )
         }
+    }
+    if (photoToDelete != null) {
+        DeletePhotoDialog(
+            photo = photoToDelete!!,
+            onConfirm = {
+                viewModel.deletePhoto(photoToDelete!!.id)
+                photoToDelete = null
+            },
+            onDismiss = { photoToDelete = null }
+        )
     }
 }
 
 @Composable
 private fun CategoryInfoCard(
-    category: com.sawwere.yoloapp.core.data.entity.Category?,
+    category: Category?,
     photoCount: Int
 ) {
     Card(
@@ -241,7 +260,8 @@ private fun InfoRow(label: String, value: String) {
 @Composable
 private fun GallerySection(
     photos: List<Photo>,
-    onPhotoClick: (Photo) -> Unit
+    onPhotoClick: (Photo) -> Unit,
+    onPhotoDelete: (Photo) -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -257,8 +277,8 @@ private fun GallerySection(
         if (photos.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp),
+                    .fillMaxSize()
+                    .weight(1f),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -288,12 +308,15 @@ private fun GallerySection(
                 columns = GridCells.Fixed(3),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.height(300.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
             ) {
                 items(photos) { photo ->
                     PhotoGridItem(
                         photo = photo,
-                        onClick = { onPhotoClick(photo) }
+                        onClick = { onPhotoClick(photo) },
+                        onDeleteClick = { onPhotoDelete(photo) }
                     )
                 }
             }
@@ -304,7 +327,8 @@ private fun GallerySection(
 @Composable
 private fun PhotoGridItem(
     photo: Photo,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDeleteClick: () -> Unit
 ) {
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     val context = LocalContext.current
@@ -329,20 +353,65 @@ private fun PhotoGridItem(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(8.dp)
     ) {
-        if (bitmap != null) {
-            Image(
-                bitmap = bitmap!!.asImageBitmap(),
-                contentDescription = photo.description,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-        } else {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+        Box(modifier = Modifier.fillMaxSize()) {
+            if (bitmap != null) {
+                Image(
+                    bitmap = bitmap!!.asImageBitmap(),
+                    contentDescription = photo.description,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                }
+            }
+
+            IconButton(
+                onClick = onDeleteClick,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(32.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), CircleShape)
             ) {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Удалить",
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
             }
         }
     }
+}
+
+@Composable
+private fun DeletePhotoDialog(
+    photo: Photo,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Удалить фото?") },
+        text = { Text("Вы уверены, что хотите удалить это фото? Действие необратимо.") },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text("Удалить")
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Отмена")
+            }
+        }
+    )
 }

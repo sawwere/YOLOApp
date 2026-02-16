@@ -90,30 +90,6 @@ class AppRepository(
         }
     }
 
-    suspend fun updatePhotoDescription(photoId: Long, description: String): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                val photo = appDao.getPhotoById(photoId)
-                if (photo != null) {
-                    val uri = Uri.parse(photo.imageUri)
-                    val updatedInMediaStore = mediaStoreRepository.updateImageDescription(uri, description)
-
-                    if (updatedInMediaStore) {
-                        val updatedPhoto = photo.copy(description = description)
-                        appDao.updatePhoto(updatedPhoto)
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            } catch (e: Exception) {
-                false
-            }
-        }
-    }
-
     suspend fun deletePhoto(photoId: Long): Boolean {
         return withContext(Dispatchers.IO) {
             try {

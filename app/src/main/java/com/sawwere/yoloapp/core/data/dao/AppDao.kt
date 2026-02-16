@@ -5,7 +5,6 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
-import androidx.room.Update
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.CategoryWithPhotos
 import com.sawwere.yoloapp.core.data.entity.Photo
@@ -30,9 +29,6 @@ interface AppDao {
     @Insert
     fun insertPhoto(photo: Photo): Long
 
-    @Update
-    fun updatePhoto(photo: Photo)
-
     @Query("SELECT * FROM photos WHERE id = :photoId")
     fun getPhotoById(photoId: Long): Photo?
 
@@ -54,7 +50,4 @@ interface AppDao {
     // Получаем количество фото в категории
     @Query("SELECT COUNT(*) FROM photos WHERE category_id = :categoryId")
     fun getPhotoCountInCategory(categoryId: Long): Int
-
-    @Query("SELECT * FROM photos WHERE category_id = :categoryId ORDER BY created_at DESC LIMIT 1")
-    fun getLatestPhotoInCategory(categoryId: Long): Photo?
 }

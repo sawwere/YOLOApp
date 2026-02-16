@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -58,8 +57,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sawwere.yoloapp.YOLOApp
 import com.sawwere.yoloapp.core.data.entity.Category
-import com.sawwere.yoloapp.ui.MainViewModelFactory
-import com.sawwere.yoloapp.ui.main.MainViewModel
 import com.sawwere.yoloapp.ui.theme.Neutral100
 import com.sawwere.yoloapp.ui.theme.Neutral300
 import com.sawwere.yoloapp.ui.theme.Neutral400
@@ -86,14 +83,13 @@ import java.util.Locale
 @Composable
 fun CategoriesListScreen(
     onCategoryClick: (Long) -> Unit,
-    viewModel: MainViewModel = viewModel(
-        factory = MainViewModelFactory(
-            (LocalContext.current.applicationContext as YOLOApp)
-                .appContainer.appRepository
+    viewModel: CategoriesListViewModel = viewModel(
+        factory = CategoriesListViewModel.provideFactory(
+            (LocalContext.current.applicationContext as YOLOApp).appContainer.appRepository
         )
     )
 ) {
-    val categories by viewModel.allCategories.collectAsState(emptyList())
+    val categoriesWithCount by viewModel.categoriesWithCount.collectAsState(emptyList())
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -152,7 +148,7 @@ fun CategoriesListScreen(
             }
         }
     ) { paddingValues ->
-        if (categories.isEmpty()) {
+        if (categoriesWithCount.isEmpty()) {
             EmptyCategoriesContent()
         } else {
             LazyColumn(
@@ -162,12 +158,13 @@ fun CategoriesListScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp)
             ) {
-                items(categories) { category ->
+                items(categoriesWithCount) { item ->
                     CategoryCard(
-                        category = category,
-                        onCategoryClick = { onCategoryClick(category.id) },
+                        category = item.category,
+                        photoCount = item.photoCount,
+                        onCategoryClick = { onCategoryClick(item.category.id) },
                         onDeleteClick = {
-                            categoryToDelete = category
+                            categoryToDelete = item.category
                             showDeleteDialog = true
                         }
                     )
@@ -250,31 +247,6 @@ private fun EmptyCategoriesContent() {
                 color = Neutral600,
                 lineHeight = 24.sp
             )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            Button(
-                onClick = { /* Открывается через FAB */ },
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Primary500,
-                    contentColor = NeutralWhite
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth(0.6f)
-                    .height(48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Создать категорию",
-                    fontWeight = FontWeight.Medium
-                )
-            }
         }
     }
 }
@@ -282,6 +254,7 @@ private fun EmptyCategoriesContent() {
 @Composable
 private fun CategoryCard(
     category: Category,
+    photoCount: Int,
     onCategoryClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
@@ -347,7 +320,7 @@ private fun CategoryCard(
                         )
 
                         Text(
-                            text = "0 фотографий", // TODO: добавить счетчик
+                            text = "$photoCount фото",
                             style = MaterialTheme.typography.labelLarge,
                             color = Neutral600
                         )
