@@ -13,6 +13,7 @@ import androidx.annotation.RequiresApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -115,6 +116,19 @@ class MediaStoreRepository(private val context: Context) {
         }
     }
 
+    suspend fun loadImageAsStream(imageUri: Uri, block: (InputStream)->Unit) {
+        return withContext(Dispatchers.IO) {
+            try {
+                val resolver = context.contentResolver
+                resolver.openInputStream(imageUri)?.use { inputStream ->
+                    block(inputStream)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error while workinng with image from MediaStore: ${e.message}", e)
+            }
+        }
+    }
+
     /**
      * Загружает миниатюру изображения (оптимизированно для списков)
      * @param imageUri Uri изображения в MediaStore
@@ -206,48 +220,6 @@ class MediaStoreRepository(private val context: Context) {
     }
 
     /**
-     * Получает информацию об изображении (размер, дата создания и т.д.)
-     */
-    suspend fun getImageInfo(imageUri: Uri): Map<String, Any>? {
-        return withContext(Dispatchers.IO) {
-            try {
-                val resolver = context.contentResolver
-
-                val projection = arrayOf(
-                    MediaStore.Images.Media.DISPLAY_NAME,
-                    MediaStore.Images.Media.SIZE,
-                    MediaStore.Images.Media.DATE_TAKEN,
-                    MediaStore.Images.Media.WIDTH,
-                    MediaStore.Images.Media.HEIGHT
-                )
-
-                resolver.query(imageUri, projection, null, null, null)?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val nameIndex = cursor.getColumnIndex(MediaStore.Images.Media.DISPLAY_NAME)
-                        val sizeIndex = cursor.getColumnIndex(MediaStore.Images.Media.SIZE)
-                        val dateIndex = cursor.getColumnIndex(MediaStore.Images.Media.DATE_TAKEN)
-                        val widthIndex = cursor.getColumnIndex(MediaStore.Images.Media.WIDTH)
-                        val heightIndex = cursor.getColumnIndex(MediaStore.Images.Media.HEIGHT)
-
-                        mapOf(
-                            "displayName" to cursor.getString(nameIndex),
-                            "size" to cursor.getLong(sizeIndex),
-                            "dateTaken" to cursor.getLong(dateIndex),
-                            "width" to cursor.getInt(widthIndex),
-                            "height" to cursor.getInt(heightIndex)
-                        )
-                    } else {
-                        null
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error getting image info: ${e.message}", e)
-                null
-            }
-        }
-    }
-
-    /**
      * Проверяет, существует ли изображение в MediaStore
      */
     suspend fun imageExists(imageUri: Uri): Boolean {
@@ -257,26 +229,6 @@ class MediaStoreRepository(private val context: Context) {
                 resolver.openInputStream(imageUri)?.close()
                 true
             } catch (e: Exception) {
-                false
-            }
-        }
-    }
-
-    /**
-     * Обновляет описание изображения в MediaStore
-     */
-    suspend fun updateImageDescription(imageUri: Uri, description: String): Boolean {
-        return withContext(Dispatchers.IO) {
-            try {
-                val resolver = context.contentResolver
-                val contentValues = ContentValues().apply {
-                    put(MediaStore.Images.Media.DESCRIPTION, description)
-                }
-
-                val updated = resolver.update(imageUri, contentValues, null, null)
-                updated > 0
-            } catch (e: Exception) {
-                Log.e(TAG, "Error updating image description: ${e.message}", e)
                 false
             }
         }

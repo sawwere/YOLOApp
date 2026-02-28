@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,11 +24,13 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -36,11 +39,15 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -50,6 +57,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,11 +65,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sawwere.yoloapp.YOLOApp
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.Photo
+import com.sawwere.yoloapp.ui.theme.NeutralWhite
+import com.sawwere.yoloapp.ui.theme.Primary500
+import com.sawwere.yoloapp.ui.theme.Secondary500
 import kotlinx.coroutines.Dispatchers
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -76,6 +88,7 @@ fun CategoryDetailScreen(
     onAddPhotoClick: () -> Unit,
     onCheckClick: () -> Unit,
     viewModel: CategoryDetailScreenViewModel = viewModel(
+        key = "category_$categoryId",
         factory = CategoryDetailScreenViewModel.provideFactory(
             categoryId,
             (LocalContext.current.applicationContext as YOLOApp).appContainer.appRepository
@@ -88,7 +101,33 @@ fun CategoryDetailScreen(
 
     var photoToDelete by remember { mutableStateOf<Photo?>(null) }
 
+    val recalculateState by viewModel.recalculateState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val hasPhotos = photos.isNotEmpty()
+    val hasVector = category?.checksum != null
+    val isCheckEnabled = hasPhotos && hasVector
+
+    LaunchedEffect(recalculateState) {
+        when (recalculateState) {
+            is CategoryDetailScreenViewModel.RecalculateState.Success -> {
+                snackbarHostState.showSnackbar(
+                    message = "Вектор контрольных сумм пересчитан",
+                    duration = SnackbarDuration.Short
+                )
+            }
+            is CategoryDetailScreenViewModel.RecalculateState.Error -> {
+                snackbarHostState.showSnackbar(
+                    message = (recalculateState as CategoryDetailScreenViewModel.RecalculateState.Error).message,
+                    duration = SnackbarDuration.Long
+                )
+            }
+            else -> {}
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -101,7 +140,7 @@ fun CategoryDetailScreen(
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Назад",
                             tint = MaterialTheme.colorScheme.onPrimary
                         )
@@ -111,49 +150,24 @@ fun CategoryDetailScreen(
                     containerColor = MaterialTheme.colorScheme.primary,
                     navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,
                     titleContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                ),
+                actions = {
+                    IconButton(onClick = onAddPhotoClick) {
+                        Icon(
+                            imageVector = Icons.Default.CameraAlt,
+                            contentDescription = "Добавить фото",
+                            tint = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             )
         },
-        floatingActionButton = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.End
-            ) {
-                FloatingActionButton(
-                    onClick = {
-                        onCheckClick()
-                    },
-                    modifier = Modifier.size(56.dp),
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    contentColor = MaterialTheme.colorScheme.onSecondary
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CheckCircle,
-                        contentDescription = "Проверка",
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                FloatingActionButton(
-                    onClick = {
-                        onAddPhotoClick()
-                    },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CameraAlt,
-                        contentDescription = "Добавить фото",
-                        modifier = Modifier.size(32.dp)
-                    )
-                }
-            }
-        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
+                .background(MaterialTheme.colorScheme.background)
         ) {
             CategoryInfoCard(
                 category = category,
@@ -163,13 +177,74 @@ fun CategoryDetailScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             GallerySection(
+                modifier = Modifier.weight(1f),
                 photos = photos,
                 onPhotoClick = { photo ->
                     println("Нажата фотография: ${photo.fileName}")
                     // Здесь можно открыть полноэкранный просмотр
                 },
-                onPhotoDelete = { photo -> photoToDelete = photo } // если добавили удаление
+                onPhotoDelete = { photo -> photoToDelete = photo }
             )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Кнопка "Проверка" - появляется только если есть фото
+                if (hasPhotos) {
+                    Button(
+                        onClick = onCheckClick,
+                        enabled = isCheckEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Primary500,
+                            contentColor = NeutralWhite,
+                            disabledContainerColor = Primary500.copy(alpha = 0.5f),
+                            disabledContentColor = NeutralWhite.copy(alpha = 0.5f)
+                        )
+                    ) {
+                        Text(
+                            text = "Проверка",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                // Кнопка "Пересчитать вектор" - видна всегда, но неактивна если нет фото
+                Button(
+                    onClick = { viewModel.recalculateChecksum(categoryId) },
+                    enabled = hasPhotos,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Secondary500,
+                        contentColor = NeutralWhite,
+                        disabledContainerColor = Secondary500.copy(alpha = 0.5f),
+                        disabledContentColor = NeutralWhite.copy(alpha = 0.5f)
+                    )
+                ) {
+                    if (recalculateState is CategoryDetailScreenViewModel.RecalculateState.InProgress) {
+                        CircularProgressIndicator(
+                            color = NeutralWhite,
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            text = "Пересчитать вектор",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
         }
     }
     if (photoToDelete != null) {
@@ -259,12 +334,13 @@ private fun InfoRow(label: String, value: String) {
 
 @Composable
 private fun GallerySection(
+    modifier: Modifier = Modifier,
     photos: List<Photo>,
     onPhotoClick: (Photo) -> Unit,
     onPhotoDelete: (Photo) -> Unit
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp)
     ) {
@@ -277,8 +353,8 @@ private fun GallerySection(
         if (photos.isEmpty()) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .weight(1f),
+                    .fillMaxWidth()
+                    .fillMaxHeight(),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
@@ -310,7 +386,7 @@ private fun GallerySection(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
+                    .fillMaxHeight()
             ) {
                 items(photos) { photo ->
                     PhotoGridItem(

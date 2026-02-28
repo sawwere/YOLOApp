@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.CategoryWithPhotos
 import com.sawwere.yoloapp.core.data.entity.Photo
@@ -24,6 +25,9 @@ interface AppDao {
 
     @Delete
     fun deleteCategory(category: Category)
+
+    @Update
+    fun updateCategory(category: Category)
 
     // Photo operations
     @Insert
