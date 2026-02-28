@@ -51,7 +51,6 @@ import kotlin.math.max
 import kotlin.math.min
 
 class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentationListener {
-    // Состояния навигации
     enum class Screen {
         CATEGORIES_LIST,
         CATEGORY_DETAIL,
