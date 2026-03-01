@@ -1,6 +1,5 @@
 package com.sawwere.yoloapp.ui.camera
 
-import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image

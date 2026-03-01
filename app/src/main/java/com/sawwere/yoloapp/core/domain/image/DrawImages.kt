@@ -10,7 +10,9 @@ import androidx.core.graphics.applyCanvas
 import com.sawwere.yoloapp.R
 import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.detection.SegmentationResult
+import javax.inject.Singleton
 
+@Singleton
 class DrawImages(private val context: Context) {
 
     private val boxColors = listOf(

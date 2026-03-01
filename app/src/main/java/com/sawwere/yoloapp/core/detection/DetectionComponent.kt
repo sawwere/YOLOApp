@@ -20,7 +20,6 @@ class DetectionComponent(
     modelPath: String,
     labelPath: String?,
     private val instanceSegmentationListener: InstanceSegmentationListener,
-    message: (String) -> Unit
 ) {
     private var interpreter: Interpreter
     private var labels = mutableListOf<String>()

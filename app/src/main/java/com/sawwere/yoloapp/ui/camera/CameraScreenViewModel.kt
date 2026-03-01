@@ -2,7 +2,6 @@ package com.sawwere.yoloapp.ui.camera
 
 import android.graphics.Bitmap
 import android.util.Log
-import android.widget.Toast
 import androidx.camera.core.Camera
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -14,6 +13,7 @@ import com.sawwere.yoloapp.core.domain.image.DrawImages
 import com.sawwere.yoloapp.core.domain.image.ImageProcessor
 import com.sawwere.yoloapp.core.domain.repository.AppRepository
 import com.sawwere.yoloapp.core.domain.image.ImageUtils
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,8 +21,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-class CameraScreenViewModel (
+@HiltViewModel
+class CameraScreenViewModel @Inject constructor(
     private val appRepository: AppRepository,
     private val imageProcessor: ImageProcessor,
     private val drawImages: DrawImages

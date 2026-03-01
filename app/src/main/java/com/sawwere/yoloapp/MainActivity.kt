@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -31,9 +32,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sawwere.yoloapp.core.detection.DetectionComponent
-import com.sawwere.yoloapp.core.domain.repository.AppRepository
-import com.sawwere.yoloapp.core.domain.image.DrawImages
-import com.sawwere.yoloapp.core.domain.image.ImageProcessor
 import com.sawwere.yoloapp.ui.camera.CameraScreen
 import com.sawwere.yoloapp.ui.camera.CameraScreenViewModel
 import com.sawwere.yoloapp.ui.camera.navigation.CAMERA_SCREEN_ROUTE
@@ -51,23 +49,14 @@ import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    // Camera components
     private lateinit var detectionComponent: DetectionComponent
-    private lateinit var drawImages: DrawImages
     private lateinit var cameraExecutor: ExecutorService
     private var camera: Camera? = null
     private var originalBitmap: Bitmap? by mutableStateOf(null)
-    private lateinit var viewModel: CameraScreenViewModel
-
-    // Repositories
-    @Inject
-    lateinit var appRepository: AppRepository
-    @Inject
-    lateinit var imageProcessor: ImageProcessor
+    private val viewModel: CameraScreenViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -80,28 +69,16 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        enableEdgeToEdge()
-
-        drawImages = DrawImages(applicationContext)
         cameraExecutor = Executors.newSingleThreadExecutor()
-
-        viewModel = CameraScreenViewModel(
-            appRepository,
-            imageProcessor,
-            drawImages
-        )
-
 
         detectionComponent = DetectionComponent(
             context = applicationContext,
             modelPath = "yolov8s_float16.tflite",
             labelPath = null,
             instanceSegmentationListener = viewModel,
-            message = {
-                Toast.makeText(applicationContext, it, Toast.LENGTH_SHORT).show()
-            }
         )
 
+        enableEdgeToEdge()
         setContent {
             YOLOAppTheme {
                 val navController = rememberNavController()
