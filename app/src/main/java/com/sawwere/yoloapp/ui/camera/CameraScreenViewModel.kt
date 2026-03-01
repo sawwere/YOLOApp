@@ -2,15 +2,14 @@ package com.sawwere.yoloapp.ui.camera
 
 import android.graphics.Bitmap
 import android.util.Log
-import android.widget.Toast
 import androidx.camera.core.Camera
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import com.sawwere.yoloapp.core.detection.DetectionComponent
+import com.sawwere.yoloapp.core.domain.image.ImageProcessor
 import com.sawwere.yoloapp.core.domain.repository.AppRepository
-import com.sawwere.yoloapp.core.image.ImageUtils
+import com.sawwere.yoloapp.core.domain.image.ImageUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,7 +19,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class CameraScreenViewModel (
-    private val appRepository: AppRepository
+    private val appRepository: AppRepository,
+    private val imageProcessor: ImageProcessor,
 ): ViewModel() {
     private lateinit var camera: Camera
 
@@ -42,8 +42,7 @@ class CameraScreenViewModel (
 
 
     private val _capturedBitmap = MutableStateFlow<Bitmap?>(null)
-    val capturedBitmap get() = _capturedBitmap
-
+    val capturedBitmap get() = _capturedBitmap.value
 
     private val _detectedBoxes = MutableStateFlow<List<DetectionComponent.Detection>>(emptyList())
     val detectedBoxes: StateFlow<List<DetectionComponent.Detection>> = _detectedBoxes.asStateFlow()
@@ -80,7 +79,7 @@ class CameraScreenViewModel (
         _capturedBitmap.value = bitmap
         Log.i(
             TAG,
-            "width=${_capturedBitmap.value!!.width} height=${_capturedBitmap.value!!.height}"
+            "width=${capturedBitmap!!.width} height=${capturedBitmap!!.height}"
         )
         val capturedBoxes = detectedBoxes.value
         viewModelScope.launch(Dispatchers.IO) {
@@ -119,18 +118,15 @@ class CameraScreenViewModel (
                     Log.d(TAG, "Processing detection $index")
 
                     val croppedSegment = ImageUtils.extractRectSegment(capturedOriginalBitmap, detection.bbox)
-                    Log.d(TAG, "Cropped segment for object $index: ${croppedSegment?.width}x${croppedSegment?.height}")
 
                     if (croppedSegment != null) {
+                        addProcessedSegment(croppedSegment.copy(croppedSegment.config!!, true), categoryId)
                         val processedBitmap = processSingleSegment(croppedSegment)
-                        Log.d(TAG, "Processed bitmap for object $index: ${processedBitmap?.width}x${processedBitmap?.height}")
-
-                        if (processedBitmap != null) {
-                            addProcessedSegment(processedBitmap, categoryId)
-                            Log.d(TAG, "Added segment $index to ViewModel")
-                        } else {
-                            Log.w(TAG, "Processed bitmap is null for object $index")
-                        }
+                        Log.d(
+                            TAG,
+                            "Processed bitmap for object $index: ${processedBitmap.width}x${processedBitmap.height}"
+                        )
+                        addProcessedSegment(processedBitmap, categoryId)
 
                         croppedSegment.recycle()
                     } else {
@@ -151,13 +147,10 @@ class CameraScreenViewModel (
         }
     }
 
-    private fun processSingleSegment(segmentBitmap: Bitmap): Bitmap? {
-        return try {
+    private fun processSingleSegment(segmentBitmap: Bitmap): Bitmap {
+        return imageProcessor.processDocumentImageEnhanced(
             segmentBitmap.copy(segmentBitmap.config!!, true)
-        } catch (e: Exception) {
-            Log.e("ImageProcessor", "Error in segment processing: ${e.message}")
-            null
-        }
+        )
     }
 
     override fun onCleared() {
@@ -165,9 +158,8 @@ class CameraScreenViewModel (
         _capturedBitmap.value?.takeIf { !it.isRecycled }?.recycle()
     }
 
-    fun addProcessedSegment(bitmap: Bitmap, categoryId: Long) {
+    private fun addProcessedSegment(bitmap: Bitmap, categoryId: Long) {
         Log.d(TAG, "Adding segment. Current count: ${_processedSegments.value.size}")
-        // Создаем новый список с добавленным элементом
         _processedSegments.value += bitmap
         Log.d(TAG, "Segment added. New count: ${_processedSegments.value.size}")
 
@@ -185,23 +177,21 @@ class CameraScreenViewModel (
     }
 
     fun clearAllSegments() {
-        Log.d("ViewModel", "Clearing all segments. Count: ${_processedSegments.value.size}")
         _processedSegments.value.forEach {
             try {
                 it.recycle()
             } catch (e: Exception) {
-                Log.e("ViewModel", "Error recycling bitmap", e)
+                Log.e(TAG, "Error recycling bitmap", e)
             }
         }
         _processedSegments.value = emptyList()
         _currentSegmentIndex.value = 0
-        Log.d("ViewModel", "All segments cleared")
+        Log.d(TAG, "All segments cleared")
     }
 
     fun nextSegment() {
-        if (_processedSegments.value.size > 1) {
-            _currentSegmentIndex.value = (_currentSegmentIndex.value + 1) % _processedSegments.value.size
-            Log.d("ViewModel", "Next segment. New index: ${_currentSegmentIndex.value}")
+        if (processedSegments.size > 1) {
+            _currentSegmentIndex.value = (currentSegmentIndex + 1) % processedSegments.size
         }
     }
 
@@ -212,20 +202,18 @@ class CameraScreenViewModel (
             } else {
                 _processedSegments.value.size - 1
             }
-            Log.d("ViewModel", "Previous segment. New index: ${_currentSegmentIndex.value}")
         }
     }
 
     fun setSegmentIndex(index: Int) {
         if (index in 0 until _processedSegments.value.size) {
             _currentSegmentIndex.value = index
-            Log.d("ViewModel", "Set segment index to: $index")
         }
     }
 
     fun updateDetections(detections: List<DetectionComponent.Detection>) {
         _detectedBoxes.value = detections
-        _detectedObjectsCount.value = detections.size  // обновляем и количество
+        _detectedObjectsCount.value = detections.size
     }
 
     fun setupZoomState(camera: Camera) {

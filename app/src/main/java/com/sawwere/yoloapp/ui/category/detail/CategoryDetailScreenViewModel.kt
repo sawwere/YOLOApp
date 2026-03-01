@@ -15,6 +15,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+
+sealed class RecalculateState {
+    object Idle : RecalculateState()
+    object InProgress : RecalculateState()
+    data class Success(val checksum: FloatArray) : RecalculateState()
+    data class Error(val message: String) : RecalculateState()
+}
+
 @HiltViewModel
 class CategoryDetailScreenViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -47,13 +55,6 @@ class CategoryDetailScreenViewModel @Inject constructor(
                 loadCategoryWithPhotos()
             }
         }
-    }
-
-    sealed class RecalculateState {
-        object Idle : RecalculateState()
-        object InProgress : RecalculateState()
-        data class Success(val checksum: FloatArray) : RecalculateState()
-        data class Error(val message: String) : RecalculateState()
     }
 
     private val _recalculateState = MutableStateFlow<RecalculateState>(RecalculateState.Idle)

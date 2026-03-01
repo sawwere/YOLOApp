@@ -8,7 +8,21 @@
     <string name="error_saving">Error saving image: %1$s</string>
     <string name="no_image">No image to save</string>
     <string name="capture_button">Capture</string>
-    <string name="segmented_saved">Segmented image saved</string>
-    <string name="original_saved">Original image saved</string>
     <string name="folder_name">YOLO-App</string>
+    <string name="category_datail_delete_photo_title">Delete photo?</string>
+    <string name="category_detail_delete_photo_confirmation">Are you sure you want to delete this photo? This action is irreversible.</string>
+    <string name="ui_common_return">Back</string>
+    <string name="ui_common_delete">Delete</string>
+    <string name="ui_common_cancel">Cancel</string>
+    <string name="category_detail_no_images_title">No photos</string>
+    <string name="category_detail_no_images_add_first_image_suggestion">Add the first photo</string>
+    <string name="category_detail_images_title">Photos</string>
+    <string name="category_detail_category_not_found">Category not found</string>
+    <string name="category_detail_created_at_label">Created:</string>
+    <string name="category_detail_name_label">Name:</string>
+    <string name="category_detail_information_label">Information</string>
+    <string name="category_detail_recalculate_vector_button">Recalculate vector</string>
+    <string name="category_detail_add_image_button">Add photo</string>
+    <string name="category_detail_couldnt_open_image_error">Couldn\'t open image</string>
+    <string name="category_detail_check_button">Check</string>
 </resources>

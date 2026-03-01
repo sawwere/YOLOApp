@@ -1,4 +1,4 @@
-package com.sawwere.yoloapp.core.image
+package com.sawwere.yoloapp.core.domain.image
 
 import android.graphics.Bitmap
 import android.graphics.RectF

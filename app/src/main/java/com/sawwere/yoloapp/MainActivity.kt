@@ -32,8 +32,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.domain.repository.AppRepository
-import com.sawwere.yoloapp.core.image.DrawImages
-import com.sawwere.yoloapp.core.image.ImageUtils
+import com.sawwere.yoloapp.core.domain.image.DrawImages
+import com.sawwere.yoloapp.core.domain.image.ImageProcessor
 import com.sawwere.yoloapp.ui.camera.CameraScreen
 import com.sawwere.yoloapp.ui.camera.CameraScreenViewModel
 import com.sawwere.yoloapp.ui.camera.navigation.CAMERA_SCREEN_ROUTE
@@ -48,7 +48,6 @@ import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.opencv.android.OpenCVLoader
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -68,6 +67,8 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     // Repositories
     @Inject
     lateinit var appRepository: AppRepository
+    @Inject
+    lateinit var imageProcessor: ImageProcessor
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,6 +88,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
         viewModel = CameraScreenViewModel(
             appRepository,
+            imageProcessor
         )
 
 
@@ -228,7 +230,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             return
         }
 
-        // Создаем комбинированное изображение для сохранения в галерею
         val bitmapToSave = original.copy(original.config!!, true)
         viewModel.onCapture(bitmapToSave, categoryId)
     }

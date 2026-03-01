@@ -8,7 +8,21 @@
     <string name="error_saving">Ошибка сохранения: %1$s</string>
     <string name="no_image">Нет изображения для сохранения</string>
     <string name="capture_button">Снять</string>
-    <string name="segmented_saved">Изображение с сегментацией сохранено</string>
-    <string name="original_saved">Оригинальное изображение сохранено</string>
     <string name="folder_name">YOLO-App</string>
+    <string name="category_datail_delete_photo_title">Удалить фото?</string>
+    <string name="category_detail_delete_photo_confirmation">Вы уверены, что хотите удалить это фото? Действие необратимо.</string>
+    <string name="ui_common_delete">Удалить</string>
+    <string name="ui_common_cancel">Отмена</string>
+    <string name="category_detail_no_images_title">Нет фотографий</string>
+    <string name="category_detail_no_images_add_first_image_suggestion">Добавьте первое фото</string>
+    <string name="category_detail_images_title">Фотографии</string>
+    <string name="category_detail_category_not_found">Категория не найдена</string>
+    <string name="category_detail_created_at_label">Создана:</string>
+    <string name="category_detail_name_label">Название:</string>
+    <string name="category_detail_information_label">Информация</string>
+    <string name="category_detail_recalculate_vector_button">Пересчитать вектор</string>
+    <string name="category_detail_add_image_button">Добавить фото</string>
+    <string name="ui_common_return">Назад</string>
+    <string name="category_detail_couldnt_open_image_error">Не удалось открыть изображение</string>
+    <string name="category_detail_check_button">Проверка</string>
 </resources>

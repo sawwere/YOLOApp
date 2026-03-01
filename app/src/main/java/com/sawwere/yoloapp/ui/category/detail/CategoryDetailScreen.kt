@@ -1,8 +1,10 @@
 package com.sawwere.yoloapp.ui.category.detail
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -59,9 +61,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.sawwere.yoloapp.R
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.Photo
 import com.sawwere.yoloapp.ui.theme.NeutralWhite
@@ -81,6 +85,8 @@ fun CategoryDetailScreen(
     onCheckClick: () -> Unit,
     viewModel: CategoryDetailScreenViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
+
     val categoryWithPhotos by viewModel.categoryWithPhotos.collectAsState()
     val category = categoryWithPhotos?.category
     val photos = categoryWithPhotos?.photos ?: emptyList()
@@ -96,15 +102,15 @@ fun CategoryDetailScreen(
 
     LaunchedEffect(recalculateState) {
         when (recalculateState) {
-            is CategoryDetailScreenViewModel.RecalculateState.Success -> {
+            is RecalculateState.Success -> {
                 snackbarHostState.showSnackbar(
                     message = "Вектор контрольных сумм пересчитан",
                     duration = SnackbarDuration.Short
                 )
             }
-            is CategoryDetailScreenViewModel.RecalculateState.Error -> {
+            is RecalculateState.Error -> {
                 snackbarHostState.showSnackbar(
-                    message = (recalculateState as CategoryDetailScreenViewModel.RecalculateState.Error).message,
+                    message = (recalculateState as RecalculateState.Error).message,
                     duration = SnackbarDuration.Long
                 )
             }
@@ -127,7 +133,7 @@ fun CategoryDetailScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад",
+                            contentDescription = stringResource(R.string.ui_common_return),
                             tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
@@ -141,7 +147,9 @@ fun CategoryDetailScreen(
                     IconButton(onClick = onAddPhotoClick) {
                         Icon(
                             imageVector = Icons.Default.CameraAlt,
-                            contentDescription = "Добавить фото",
+                            contentDescription = stringResource(
+                                R.string.category_detail_add_image_button
+                            ),
                             tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -166,8 +174,19 @@ fun CategoryDetailScreen(
                 modifier = Modifier.weight(1f),
                 photos = photos,
                 onPhotoClick = { photo ->
-                    println("Нажата фотография: ${photo.fileName}")
-                    // Здесь можно открыть полноэкранный просмотр
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(Uri.parse(photo.imageUri), "image/*")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.category_detail_couldnt_open_image_error),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 },
                 onPhotoDelete = { photo -> photoToDelete = photo }
             )
@@ -177,7 +196,6 @@ fun CategoryDetailScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Кнопка "Проверка" - появляется только если есть фото
                 if (hasPhotos) {
                     Button(
                         onClick = onCheckClick,
@@ -194,14 +212,13 @@ fun CategoryDetailScreen(
                         )
                     ) {
                         Text(
-                            text = "Проверка",
+                            text = stringResource(R.string.category_detail_check_button),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium
                         )
                     }
                 }
 
-                // Кнопка "Пересчитать вектор" - видна всегда, но неактивна если нет фото
                 Button(
                     onClick = { viewModel.recalculateChecksum() },
                     enabled = hasPhotos,
@@ -216,7 +233,7 @@ fun CategoryDetailScreen(
                         disabledContentColor = NeutralWhite.copy(alpha = 0.5f)
                     )
                 ) {
-                    if (recalculateState is CategoryDetailScreenViewModel.RecalculateState.InProgress) {
+                    if (recalculateState is RecalculateState.InProgress) {
                         CircularProgressIndicator(
                             color = NeutralWhite,
                             modifier = Modifier.size(24.dp),
@@ -224,7 +241,9 @@ fun CategoryDetailScreen(
                         )
                     } else {
                         Text(
-                            text = "Пересчитать вектор",
+                            text = stringResource(
+                                R.string.category_detail_recalculate_vector_button
+                            ),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium
                         )
@@ -235,7 +254,6 @@ fun CategoryDetailScreen(
     }
     if (photoToDelete != null) {
         DeletePhotoDialog(
-            photo = photoToDelete!!,
             onConfirm = {
                 viewModel.deletePhoto(photoToDelete!!.id)
                 photoToDelete = null
@@ -269,7 +287,7 @@ private fun CategoryInfoCard(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Информация",
+                        text = stringResource(R.string.category_detail_information_label),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -284,17 +302,17 @@ private fun CategoryInfoCard(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 InfoRow(
-                    label = "Название:",
+                    label = stringResource(R.string.category_detail_name_label),
                     value = category.name
                 )
 
                 InfoRow(
-                    label = "Создана:",
+                    label = stringResource(R.string.category_detail_created_at_label),
                     value = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
                         .format(Date(category.createdAt))
                 )
             } else {
-                Text("Категория не найдена")
+                Text(stringResource(R.string.category_detail_category_not_found))
             }
         }
     }
@@ -331,7 +349,7 @@ private fun GallerySection(
             .padding(horizontal = 16.dp)
     ) {
         Text(
-            text = "Фотографии",
+            text = stringResource(R.string.category_detail_images_title),
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.padding(bottom = 8.dp)
         )
@@ -348,18 +366,22 @@ private fun GallerySection(
                 ) {
                     Icon(
                         imageVector = Icons.Default.PhotoLibrary,
-                        contentDescription = "Нет фото",
+                        contentDescription = stringResource(
+                            R.string.category_detail_no_images_title
+                        ),
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Нет фотографий",
+                        text = stringResource(R.string.category_detail_no_images_title),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "Добавьте первое фото",
+                        text = stringResource(
+                            R.string.category_detail_no_images_add_first_image_suggestion
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -441,7 +463,7 @@ private fun PhotoGridItem(
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Удалить",
+                    contentDescription = stringResource(R.string.ui_common_delete),
                     tint = Color.White,
                     modifier = Modifier.size(16.dp)
                 )
@@ -452,14 +474,13 @@ private fun PhotoGridItem(
 
 @Composable
 private fun DeletePhotoDialog(
-    photo: Photo,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Удалить фото?") },
-        text = { Text("Вы уверены, что хотите удалить это фото? Действие необратимо.") },
+        title = { Text(stringResource(R.string.category_datail_delete_photo_title)) },
+        text = { Text(stringResource(R.string.category_detail_delete_photo_confirmation)) },
         confirmButton = {
             Button(
                 onClick = onConfirm,
@@ -467,12 +488,12 @@ private fun DeletePhotoDialog(
                     containerColor = MaterialTheme.colorScheme.error
                 )
             ) {
-                Text("Удалить")
+                Text(stringResource(R.string.ui_common_delete))
             }
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss) {
-                Text("Отмена")
+                Text(stringResource(R.string.ui_common_cancel))
             }
         }
     )

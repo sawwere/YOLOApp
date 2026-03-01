@@ -1,6 +1,7 @@
 package com.sawwere.yoloapp.core.domain.service.usecase
 
 import android.net.Uri
+import com.sawwere.yoloapp.core.domain.exception.EmptyCategoryException
 import com.sawwere.yoloapp.core.domain.repository.AppRepository
 import com.sawwere.yoloapp.core.domain.repository.MediaStoreRepository
 import com.sawwere.yoloapp.ui.category.detail.usecase.RecalculateChecksum
@@ -19,7 +20,7 @@ class RecalculateChecksumImpl @Inject constructor(
         return try {
             val photos = repository.getPhotosByCategory(categoryId).first()
             if (photos.isEmpty()) {
-                return Result.failure(Exception("Нет фотографий в категории"))
+                return Result.failure(EmptyCategoryException(categoryId))
             }
 
             val md = MessageDigest.getInstance("MD5")

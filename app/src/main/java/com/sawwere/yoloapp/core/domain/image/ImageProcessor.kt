@@ -1,4 +1,4 @@
-package com.sawwere.yoloapp.core.image
+package com.sawwere.yoloapp.core.domain.image
 
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -10,11 +10,12 @@ import org.opencv.core.Rect
 import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
+import javax.inject.Singleton
 import kotlin.math.max
 import kotlin.math.min
 
+@Singleton
 class ImageProcessor {
-
     companion object {
         private const val TARGET_SIZE = 224
         private const val ADAPTIVE_THRESH_BLOCK_SIZE = 31
@@ -170,7 +171,8 @@ class ImageProcessor {
 
             if (xOffset >= 0 && yOffset >= 0 &&
                 xOffset + newWidth <= TARGET_SIZE &&
-                yOffset + newHeight <= TARGET_SIZE) {
+                yOffset + newHeight <= TARGET_SIZE
+            ) {
 
                 val roi = Rect(xOffset, yOffset, newWidth, newHeight)
                 val destinationROI = squareMat.submat(roi)
