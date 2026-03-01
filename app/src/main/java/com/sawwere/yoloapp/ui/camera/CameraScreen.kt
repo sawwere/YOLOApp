@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
@@ -61,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sawwere.yoloapp.MainActivity
+import com.sawwere.yoloapp.core.system.VibrationComponent
 
 
 @Composable
@@ -71,6 +71,8 @@ fun CameraScreen(
     segmentedBitmap: Bitmap?
 ) {
     val context = LocalContext.current
+
+    val vibrationComponent = VibrationComponent.getFromContext(context)
 
     val preProcessTime = viewModel.preProcessTime.collectAsState()
     val inferenceTime = viewModel.inferenceTime.collectAsState()
@@ -247,7 +249,7 @@ fun CameraScreen(
                         )
                         Text(
                             text = if (processedSegments.value.isNotEmpty()) {
-                                "Segment ${currentSegmentIndex.value + 1}/${processedSegments.value.size}"
+                                "Segment ${currentSegmentIndex.intValue + 1}/${processedSegments.value.size}"
                             } else {
                                 "Нажмите кнопку для захвата"
                             },
@@ -453,7 +455,10 @@ fun CameraScreen(
             }
 
             ShutterButton(
-                onClick = onCaptureClick,
+                onClick = {
+                    onCaptureClick()
+                    vibrationComponent.triggerHapticFeedback()
+                },
                 modifier = Modifier.align(Alignment.Center)
             )
 

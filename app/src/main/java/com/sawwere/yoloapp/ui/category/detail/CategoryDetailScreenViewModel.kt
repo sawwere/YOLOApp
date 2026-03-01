@@ -1,20 +1,29 @@
 package com.sawwere.yoloapp.ui.category.detail
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sawwere.yoloapp.core.data.entity.CategoryWithPhotos
-import com.sawwere.yoloapp.core.data.repository.AppRepository
+import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import com.sawwere.yoloapp.ui.category.detail.navigation.CATEGORY_ID_ARG
+import com.sawwere.yoloapp.ui.category.detail.usecase.RecalculateChecksum
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class CategoryDetailScreenViewModel(
-    private val categoryId: Long,
-    private val repository: AppRepository
+@HiltViewModel
+class CategoryDetailScreenViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
+    private val repository: AppRepository,
+    private val recalculateChecksum: RecalculateChecksum
 ) : ViewModel() {
+    private val categoryId: Long = savedStateHandle[CATEGORY_ID_ARG]
+        ?: throw IllegalArgumentException("$CATEGORY_ID_ARG argument missing")
+
 
     private val _categoryWithPhotos = MutableStateFlow<CategoryWithPhotos?>(null)
     val categoryWithPhotos: StateFlow<CategoryWithPhotos?> = _categoryWithPhotos.asStateFlow()
@@ -50,32 +59,18 @@ class CategoryDetailScreenViewModel(
     private val _recalculateState = MutableStateFlow<RecalculateState>(RecalculateState.Idle)
     val recalculateState: StateFlow<RecalculateState> = _recalculateState
 
-    fun recalculateChecksum(categoryId: Long) {
+    fun recalculateChecksum() {
         viewModelScope.launch {
             _recalculateState.value = RecalculateState.InProgress
-            val result = repository.recalculateChecksumForCategory(categoryId)
+            val result = recalculateChecksum(categoryId)
             _recalculateState.value = when {
                 result.isSuccess -> RecalculateState.Success(result.getOrNull()!!)
-                else -> RecalculateState.Error(result.exceptionOrNull()?.message ?: "Неизвестная ошибка")
+                else -> RecalculateState.Error(result.exceptionOrNull()?.message
+                    ?: "Неизвестная ошибка")
             }
             // Через 2 секунды сбрасываем в Idle
             delay(2000)
             _recalculateState.value = RecalculateState.Idle
-        }
-    }
-
-    companion object {
-        fun provideFactory(
-            categoryId: Long,
-            repository: AppRepository
-        ): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
-            @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                if (modelClass.isAssignableFrom(CategoryDetailScreenViewModel::class.java)) {
-                    return CategoryDetailScreenViewModel(categoryId, repository) as T
-                }
-                throw IllegalArgumentException("Unknown ViewModel class")
-            }
         }
     }
 }

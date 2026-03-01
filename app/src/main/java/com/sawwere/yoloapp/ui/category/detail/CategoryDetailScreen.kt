@@ -25,12 +25,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,8 +35,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,7 +52,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,8 +61,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.sawwere.yoloapp.YOLOApp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.Photo
 import com.sawwere.yoloapp.ui.theme.NeutralWhite
@@ -83,17 +76,10 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoryDetailScreen(
-    categoryId: Long,
     onBackClick: () -> Unit,
     onAddPhotoClick: () -> Unit,
     onCheckClick: () -> Unit,
-    viewModel: CategoryDetailScreenViewModel = viewModel(
-        key = "category_$categoryId",
-        factory = CategoryDetailScreenViewModel.provideFactory(
-            categoryId,
-            (LocalContext.current.applicationContext as YOLOApp).appContainer.appRepository
-        )
-    )
+    viewModel: CategoryDetailScreenViewModel = hiltViewModel()
 ) {
     val categoryWithPhotos by viewModel.categoryWithPhotos.collectAsState()
     val category = categoryWithPhotos?.category
@@ -217,7 +203,7 @@ fun CategoryDetailScreen(
 
                 // Кнопка "Пересчитать вектор" - видна всегда, но неактивна если нет фото
                 Button(
-                    onClick = { viewModel.recalculateChecksum(categoryId) },
+                    onClick = { viewModel.recalculateChecksum() },
                     enabled = hasPhotos,
                     modifier = Modifier
                         .fillMaxWidth()

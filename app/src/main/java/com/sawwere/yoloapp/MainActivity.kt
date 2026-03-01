@@ -3,13 +3,8 @@ package com.sawwere.yoloapp
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.Matrix
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -30,53 +25,50 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.sawwere.yoloapp.core.detection.DetectionComponent
+import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import com.sawwere.yoloapp.core.image.DrawImages
+import com.sawwere.yoloapp.core.image.ImageUtils
 import com.sawwere.yoloapp.ui.camera.CameraScreen
 import com.sawwere.yoloapp.ui.camera.CameraScreenViewModel
-import com.sawwere.yoloapp.core.data.AppDatabase
-import com.sawwere.yoloapp.core.data.repository.AppRepository
-import com.sawwere.yoloapp.core.data.repository.MediaStoreRepository
-import com.sawwere.yoloapp.core.detection.DetectionComponent
-import com.sawwere.yoloapp.core.image.DrawImages
-import com.sawwere.yoloapp.core.system.VibrationComponent
+import com.sawwere.yoloapp.ui.camera.navigation.CAMERA_SCREEN_ROUTE
+import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenNavigation
 import com.sawwere.yoloapp.ui.category.detail.CategoryDetailScreen
+import com.sawwere.yoloapp.ui.category.detail.navigation.CATEGORY_DETAILS_SCREEN_ROUTE
+import com.sawwere.yoloapp.ui.category.detail.navigation.CATEGORY_ID_ARG
+import com.sawwere.yoloapp.ui.category.detail.navigation.CategoryDetailsNavigation
 import com.sawwere.yoloapp.ui.category.list.CategoriesListScreen
+import com.sawwere.yoloapp.ui.category.list.navigation.CATEGORIES_LIST_SCREEN_ROUTE
 import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.opencv.android.OpenCVLoader
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import kotlin.math.max
-import kotlin.math.min
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentationListener {
-    enum class Screen {
-        CATEGORIES_LIST,
-        CATEGORY_DETAIL,
-        CAMERA
-    }
-
-    private var currentScreen by mutableStateOf(Screen.CATEGORIES_LIST)
-    private var selectedCategoryId by mutableStateOf(0L)
-
     // Camera components
     private lateinit var detectionComponent: DetectionComponent
     private lateinit var drawImages: DrawImages
     private lateinit var cameraExecutor: ExecutorService
-    private lateinit var vibrationComponent: VibrationComponent
     private var camera: Camera? = null
     private var segmentedBitmap: Bitmap? by mutableStateOf(null)
     private var originalBitmap: Bitmap? by mutableStateOf(null)
     private var capturedDetections: List<DetectionComponent.Detection> by mutableStateOf(emptyList())
-    private var capturedOriginalBitmap: Bitmap? by mutableStateOf(null)
-    private lateinit var vibrator: Vibrator
     private lateinit var viewModel: CameraScreenViewModel
 
     // Repositories
-    private lateinit var mediaStoreRepository: MediaStoreRepository
-    private lateinit var appRepository: AppRepository
-    private var currentCategoryIdForCamera by mutableStateOf(0L)
+    @Inject
+    lateinit var appRepository: AppRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,22 +81,15 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             return
         }
 
-        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(VIBRATOR_SERVICE) as Vibrator
-        }
-
         enableEdgeToEdge()
 
         drawImages = DrawImages(applicationContext)
         cameraExecutor = Executors.newSingleThreadExecutor()
-        viewModel = CameraScreenViewModel()
 
-        // Инициализация репозиториев и ViewModel для работы с категориями и сохранением
-        initializeRepositoriesAndViewModels()
+        viewModel = CameraScreenViewModel(
+            appRepository,
+        )
+
 
         detectionComponent = DetectionComponent(
             context = applicationContext,
@@ -116,50 +101,44 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             }
         )
 
-        vibrationComponent = VibrationComponent(vibrator)
-
         setContent {
             YOLOAppTheme {
-                // Навигация между экранами
-                when (currentScreen) {
-                    Screen.CATEGORIES_LIST -> {
+                val navController = rememberNavController()
+                NavHost(
+                    navController = navController,
+                    startDestination = CATEGORIES_LIST_SCREEN_ROUTE
+                ) {
+                    composable(CATEGORIES_LIST_SCREEN_ROUTE) {
                         CategoriesListScreen(
                             onCategoryClick = { categoryId ->
-                                selectedCategoryId = categoryId
-                                currentScreen = Screen.CATEGORY_DETAIL
+                                navController.navigate(CategoryDetailsNavigation.passId(categoryId))
                             }
                         )
                     }
-
-                    Screen.CATEGORY_DETAIL -> {
+                    composable(
+                        route = CATEGORY_DETAILS_SCREEN_ROUTE,
+                        arguments = listOf(navArgument(CATEGORY_ID_ARG) { type = NavType.LongType })
+                    ) { backStackEntry ->
+                        val categoryId = backStackEntry.arguments?.getLong(CATEGORY_ID_ARG) ?: 0L
                         CategoryDetailScreen(
-                            categoryId = selectedCategoryId,
-                            onBackClick = {
-                                currentScreen = Screen.CATEGORIES_LIST
-                            },
+                            onBackClick = { navController.popBackStack() },
                             onAddPhotoClick = {
-                                currentCategoryIdForCamera = selectedCategoryId
-                                currentScreen = Screen.CAMERA
+                                navController.navigate(CameraScreenNavigation.passId(categoryId))
                             },
                             onCheckClick = {
-                                // Можно добавить дополнительную логику проверки
-                                Toast.makeText(
-                                    this@MainActivity,
-                                    "Запуск проверки...",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                Toast.makeText(this@MainActivity, "Запуск проверки...", Toast.LENGTH_SHORT).show()
                             }
                         )
                     }
-
-                    Screen.CAMERA -> {
+                    composable(
+                        route = CAMERA_SCREEN_ROUTE,
+                        arguments = listOf(navArgument("categoryId") { type = NavType.LongType })
+                    ) { backStackEntry ->
+                        val categoryId = backStackEntry.arguments?.getLong("categoryId") ?: 0L
                         CameraScreen(
-                            onBackClick = {
-                                currentScreen = Screen.CATEGORY_DETAIL
-                            },
+                            onBackClick = { navController.popBackStack() },
                             onCaptureClick = {
-                                captureCurrentFrame()
-                                vibrationComponent.triggerHapticFeedback()
+                                captureCurrentFrame(categoryId)
                             },
                             viewModel = viewModel,
                             segmentedBitmap = segmentedBitmap
@@ -170,39 +149,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         }
 
         checkPermission()
-    }
-
-    private fun initializeRepositoriesAndViewModels() {
-        mediaStoreRepository = MediaStoreRepository(applicationContext)
-        val database = AppDatabase.getDatabase(applicationContext)
-        appRepository = AppRepository(database.appDao(), mediaStoreRepository)
-    }
-
-
-    private suspend fun saveImageWithMetadata(bitmap: Bitmap, description: String): Uri? {
-        return try {
-            val category = appRepository.getCategoryById(currentCategoryIdForCamera)
-            if (category == null) {
-                Log.e("SaveImage", "Category not found: $currentCategoryIdForCamera")
-                return null
-            }
-
-            val uri = mediaStoreRepository.saveImageToPublicStorage(
-                bitmap = bitmap,
-                categoryName = category.name,
-                description = description
-            )
-
-            if (uri != null) {
-                appRepository.insertPhoto(currentCategoryIdForCamera, bitmap, description)
-                Log.d("SaveImage", "Image saved successfully: $uri")
-            }
-
-            uri
-        } catch (e: Exception) {
-            Log.e("SaveImage", "Error saving image: ${e.message}", e)
-            null
-        }
     }
 
     private fun checkPermission() = lifecycleScope.launch(Dispatchers.IO) {
@@ -277,65 +223,26 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun captureCurrentFrame() {
+    private fun captureCurrentFrame(categoryId: Long) {
         val original = originalBitmap ?: run {
             Toast.makeText(this, getString(R.string.no_image), Toast.LENGTH_SHORT).show()
             return
         }
 
-        // Сохраняем текущие обнаруженные объекты и оригинальное изображение
-        capturedOriginalBitmap = original
-        val detectionCount = capturedDetections.size
-
         // Создаем комбинированное изображение для сохранения в галерею
-        val bitmapToSave = if (segmentedBitmap != null) {
-            Bitmap.createBitmap(
-                original.width,
-                original.height,
-                Bitmap.Config.ARGB_8888
-            ).apply {
-                val canvas = Canvas(this)
-                canvas.drawBitmap(original, 0f, 0f, null)
-                canvas.drawBitmap(segmentedBitmap!!, 0f, 0f, null)
-            }
-        } else {
-            // Создаем копию оригинального изображения для сохранения
-            original.copy(original.config!!, true)
-        }
+        val bitmapToSave = original.copy(original.config!!, true)
 
-        // Сохраняем в галерею с использованием MediaStoreRepository
+        // Сохраняем в галерею
         lifecycleScope.launch(Dispatchers.IO) {
-            val description = "Обнаружено объектов: $detectionCount"
-            val uri = saveImageWithMetadata(bitmapToSave, description)
-
-            withContext(Dispatchers.Main) {
-                if (uri != null) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Изображение сохранено в категорию",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                } else {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Ошибка сохранения изображения",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-
-            // Освобождаем bitmap после сохранения
-            bitmapToSave.recycle()
+            viewModel.saveImageWithMetadata(bitmapToSave, categoryId)
         }
 
         // Обрабатываем захваченные сегменты
-        processCapturedSegments()
+        processCapturedSegments(categoryId, bitmapToSave)
     }
 
-    private fun processCapturedSegments() {
+    private fun processCapturedSegments(categoryId: Long, capturedOriginalBitmap: Bitmap?) {
         Log.d("SegmentDebug", "Starting segment processing...")
-        Log.d("SegmentDebug", "Captured bitmap: ${capturedOriginalBitmap != null}")
-        Log.d("SegmentDebug", "Captured detections: ${capturedDetections.size}")
 
         if (capturedOriginalBitmap == null || capturedDetections.isEmpty()) {
             Log.d("SegmentDebug", "No captured data to process")
@@ -350,14 +257,12 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                Log.d("SegmentDebug", "Processing ${capturedDetections.size} detections")
-
                 // Обрабатываем каждый обнаруженный объект
                 for ((index, detection) in capturedDetections.withIndex()) {
                     try {
                         Log.d("SegmentDebug", "Processing detection $index")
 
-                        val croppedSegment = extractObjectSegment(capturedOriginalBitmap!!, detection)
+                        val croppedSegment = ImageUtils.extractRectSegment(capturedOriginalBitmap, detection.bbox)
                         Log.d("SegmentDebug", "Cropped segment for object $index: ${croppedSegment?.width}x${croppedSegment?.height}")
 
                         if (croppedSegment != null) {
@@ -366,12 +271,9 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
                             if (processedBitmap != null) {
                                 withContext(Dispatchers.Main) {
-                                    viewModel.addProcessedSegment(processedBitmap)
+                                    viewModel.addProcessedSegment(processedBitmap, categoryId)
                                     Log.d("SegmentDebug", "Added segment $index to ViewModel")
                                 }
-
-                                // Сохраняем отдельный сегмент как отдельное фото
-                                saveIndividualSegment(processedBitmap, index)
                             } else {
                                 Log.w("SegmentDebug", "Processed bitmap is null for object $index")
                             }
@@ -380,7 +282,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                         } else {
                             Log.w("SegmentDebug", "Cropped segment is null for object $index")
                             Log.w("SegmentDebug", "BBox: [${detection.bbox.left}, ${detection.bbox.top}, ${detection.bbox.right}, ${detection.bbox.bottom}]")
-                            Log.w("SegmentDebug", "Image size: ${capturedOriginalBitmap!!.width}x${capturedOriginalBitmap!!.height}")
+                            Log.w("SegmentDebug", "Image size: ${capturedOriginalBitmap.width}x${capturedOriginalBitmap.height}")
                         }
                     } catch (e: Exception) {
                         Log.e("SegmentDebug", "Error processing object $index: ${e.message}", e)
@@ -418,18 +320,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         }
     }
 
-    private suspend fun saveIndividualSegment(bitmap: Bitmap, index: Int) {
-        try {
-            val category = appRepository.getCategoryById(currentCategoryIdForCamera)
-            if (category != null) {
-                val description = "Сегмент объекта $index из категории ${category.name}"
-                saveImageWithMetadata(bitmap, description)
-            }
-        } catch (e: Exception) {
-            Log.e("SaveSegment", "Error saving segment $index: ${e.message}")
-        }
-    }
-
     override fun onDetect(
         interfaceTime: Long,
         results: List<DetectionComponent.Detection>,
@@ -456,61 +346,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             )
         }
 
-        // Сохраняем текущие детекции для возможного захвата
         capturedDetections = results
-    }
-
-
-    private fun extractObjectSegment(
-        originalBitmap: Bitmap,
-        detection: DetectionComponent.Detection
-    ): Bitmap? {
-        return try {
-            val boundingBox = detection.bbox
-
-            // Координаты уже в пикселях из DetectionComponent
-            val left = boundingBox.left.toInt()
-            val top = boundingBox.top.toInt()
-            val right = boundingBox.right.toInt()
-            val bottom = boundingBox.bottom.toInt()
-
-            Log.d("SegmentExtraction",
-                "Extracting segment - BBox: [$left, $top, $right, $bottom], " +
-                        "Image: ${originalBitmap.width}x${originalBitmap.height}")
-
-            // Проверяем, что координаты валидны
-            if (left >= right || top >= bottom) {
-                Log.w("SegmentExtraction", "Invalid bounding box coordinates")
-                return null
-            }
-
-            // Проверяем границы с небольшим запасом
-            val padding = 5
-            val clampedLeft = max(left - padding, 0)
-            val clampedTop = max(top - padding, 0)
-            val clampedRight = min(right + padding, originalBitmap.width)
-            val clampedBottom = min(bottom + padding, originalBitmap.height)
-
-            val width = clampedRight - clampedLeft
-            val height = clampedBottom - clampedTop
-
-            if (width <= 0 || height <= 0) {
-                Log.w("SegmentExtraction", "Invalid dimensions after clamping: $width x $height")
-                return null
-            }
-
-            // Вырезаем область
-            val segment = Bitmap.createBitmap(
-                originalBitmap,
-                clampedLeft, clampedTop, width, height
-            )
-
-            Log.d("SegmentExtraction", "Successfully extracted segment: ${segment.width}x${segment.height}")
-            segment
-        } catch (e: Exception) {
-            Log.e("SegmentExtraction", "Error extracting object segment: ${e.message}", e)
-            null
-        }
     }
 
     private fun processSingleSegment(segmentBitmap: Bitmap): Bitmap? {
@@ -535,21 +371,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         super.onDestroy()
         detectionComponent.close()
         cameraExecutor.shutdown()
-    }
-
-    override fun onBackPressed() {
-        // Обработка системной кнопки "Назад"
-        when (currentScreen) {
-            Screen.CATEGORIES_LIST -> {
-                super.onBackPressed() // Выход из приложения
-            }
-            Screen.CATEGORY_DETAIL -> {
-                currentScreen = Screen.CATEGORIES_LIST
-            }
-            Screen.CAMERA -> {
-                currentScreen = Screen.CATEGORY_DETAIL
-            }
-        }
     }
 
     inner class ImageAnalyzer : ImageAnalysis.Analyzer {
@@ -582,8 +403,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     companion object {
         val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.CAMERA,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE
         )
-        private const val REQUEST_WRITE_PERMISSION = 101
     }
 }

@@ -1,17 +1,20 @@
 package com.sawwere.yoloapp.ui.category.list
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.sawwere.yoloapp.core.data.repository.AppRepository
+import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import com.sawwere.yoloapp.ui.category.list.model.CategoryWithCount
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class CategoriesListViewModel(
+@HiltViewModel
+class CategoriesListViewModel @Inject constructor(
     private val repository: AppRepository
 ) : ViewModel() {
 
@@ -45,18 +48,5 @@ class CategoriesListViewModel(
         viewModelScope.launch {
             repository.deleteCategory(categoryId)
         }
-    }
-
-    companion object {
-        fun provideFactory(repository: AppRepository): ViewModelProvider.Factory =
-            object : ViewModelProvider.Factory {
-                @Suppress("UNCHECKED_CAST")
-                override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    if (modelClass.isAssignableFrom(CategoriesListViewModel::class.java)) {
-                        return CategoriesListViewModel(repository) as T
-                    }
-                    throw IllegalArgumentException("Unknown ViewModel class")
-                }
-            }
     }
 }

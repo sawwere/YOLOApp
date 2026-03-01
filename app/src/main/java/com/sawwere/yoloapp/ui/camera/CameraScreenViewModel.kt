@@ -1,14 +1,22 @@
 package com.sawwere.yoloapp.ui.camera
 
 import android.graphics.Bitmap
+import android.net.Uri
 import android.util.Log
 import androidx.camera.core.Camera
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
-class CameraScreenViewModel {
+class CameraScreenViewModel (
+    private val appRepository: AppRepository
+): ViewModel() {
     private lateinit var camera: Camera
 
     private val _preProcessTime = MutableStateFlow(0L)
@@ -56,11 +64,30 @@ class CameraScreenViewModel {
         _debugMode.update { !it }
     }
 
-    fun addProcessedSegment(bitmap: Bitmap) {
+    fun addProcessedSegment(bitmap: Bitmap, categoryId: Long) {
         Log.d("ViewModel", "Adding segment. Current count: ${_processedSegments.value.size}")
         // Создаем новый список с добавленным элементом
         _processedSegments.value += bitmap
         Log.d("ViewModel", "Segment added. New count: ${_processedSegments.value.size}")
+        viewModelScope.launch(Dispatchers.IO) {
+            saveImageWithMetadata(bitmap, categoryId)
+        }
+    }
+
+    suspend fun saveImageWithMetadata(
+        bitmap: Bitmap,
+        categoryId: Long
+    ): Uri? {
+        return try {
+            val uri = appRepository.insertPhoto(categoryId, bitmap).getOrNull()
+            if (uri != null) {
+                Log.d("ViewModel", "Image saved successfully: $uri")
+            }
+            uri
+        } catch (e: Exception) {
+            Log.e("ViewModel", "Error saving image: ${e.message}", e)
+            null
+        }
     }
 
     fun clearAllSegments() {

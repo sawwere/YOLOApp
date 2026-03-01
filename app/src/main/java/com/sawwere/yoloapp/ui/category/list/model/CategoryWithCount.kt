@@ -1,4 +1,4 @@
-package com.sawwere.yoloapp.ui.category.list
+package com.sawwere.yoloapp.ui.category.list.model
 
 import com.sawwere.yoloapp.core.data.entity.Category
 

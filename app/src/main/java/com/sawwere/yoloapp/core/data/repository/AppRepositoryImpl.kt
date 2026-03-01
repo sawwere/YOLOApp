@@ -2,48 +2,54 @@ package com.sawwere.yoloapp.core.data.repository
 
 import android.graphics.Bitmap
 import android.net.Uri
-import androidx.compose.ui.graphics.asImageBitmap
 import com.sawwere.yoloapp.core.data.dao.AppDao
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.CategoryWithPhotos
 import com.sawwere.yoloapp.core.data.entity.Photo
+import com.sawwere.yoloapp.core.domain.repository.AppRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import java.security.MessageDigest
+import javax.inject.Inject
 
-class AppRepository(
+class AppRepositoryImpl @Inject constructor(
     private val appDao: AppDao,
-    private val mediaStoreRepository: MediaStoreRepository
-) {
+    private val mediaStoreRepository: MediaStoreRepositoryImpl
+): AppRepository {
 
     // Category operations
-    suspend fun insertCategory(name: String): Long {
+    override suspend fun insertCategory(name: String): Long {
         return withContext(Dispatchers.IO) {
             val category = Category(name = name)
             appDao.insertCategory(category)
         }
     }
 
-    fun getAllCategories(): Flow<List<Category>> = appDao.getAllCategories()
+    override suspend fun updateCategory(category: Category) {
+        return withContext(Dispatchers.IO) {
+            appDao.updateCategory(category)
+        }
+    }
 
-    fun getCategoryWithPhotos(categoryId: Long): Flow<CategoryWithPhotos?> =
+    override fun getAllCategories(): Flow<List<Category>> = appDao.getAllCategories()
+
+    override fun getCategoryWithPhotos(categoryId: Long): Flow<CategoryWithPhotos?> =
         appDao.getCategoryWithPhotos(categoryId)
 
-    suspend fun getCategoryById(categoryId: Long): Category? =
+    override suspend fun getCategoryById(categoryId: Long): Category? =
         withContext(Dispatchers.IO) {
             appDao.getCategoryById(categoryId)
         }
 
     // Photo operations
-    fun getPhotosByCategory(categoryId: Long): Flow<List<Photo>> =
+    override fun getPhotosByCategory(categoryId: Long): Flow<List<Photo>> =
         appDao.getPhotosByCategory(categoryId)
 
-    suspend fun insertPhoto(
+    override suspend fun insertPhoto(
         categoryId: Long,
         bitmap: Bitmap,
-        description: String = ""
+        description: String
     ): Result<Uri> {
         return withContext(Dispatchers.IO) {
             try {
@@ -73,26 +79,26 @@ class AppRepository(
         }
     }
 
-    suspend fun getPhotoCountInCategory(categoryId: Long): Int =
+    override suspend fun getPhotoCountInCategory(categoryId: Long): Int =
         withContext(Dispatchers.IO) {
             appDao.getPhotoCountInCategory(categoryId)
         }
 
-    suspend fun getCategoryTotalSize(categoryId: Long): Long {
+    override suspend fun getCategoryTotalSize(categoryId: Long): Long {
         return withContext(Dispatchers.IO) {
             val photos = getPhotosByCategory(categoryId).first()
             photos.sumOf { it.fileSize }
         }
     }
 
-    suspend fun getLatestPhotoInCategory(categoryId: Long): Photo? {
+    override suspend fun getLatestPhotoInCategory(categoryId: Long): Photo? {
         return withContext(Dispatchers.IO) {
             val photos = getPhotosByCategory(categoryId).first()
             photos.maxByOrNull { it.createdAt }
         }
     }
 
-    suspend fun deletePhoto(photoId: Long): Boolean {
+    override suspend fun deletePhoto(photoId: Long): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 val photo = appDao.getPhotoById(photoId)
@@ -111,7 +117,7 @@ class AppRepository(
         }
     }
 
-    suspend fun deleteCategory(categoryId: Long): Boolean {
+    override suspend fun deleteCategory(categoryId: Long): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 val category = appDao.getCategoryById(categoryId)
@@ -135,55 +141,6 @@ class AppRepository(
             } catch (e: Exception) {
                 false
             }
-        }
-    }
-
-    suspend fun recalculateChecksumForCategory(
-        categoryId: Long
-    ): Result<FloatArray> = withContext(Dispatchers.IO) {
-        try {
-            val photos = appDao.getPhotosByCategory(categoryId).first()
-            if (photos.isEmpty()) {
-                return@withContext Result.failure(Exception("Нет фотографий в категории"))
-            }
-
-            val md = MessageDigest.getInstance("MD5")
-            val targetSize = 128
-            val vectors = mutableListOf<FloatArray>()
-
-            for (photo in photos) {
-                val uri = Uri.parse(photo.imageUri)
-                mediaStoreRepository.loadImageAsStream(uri) { stream ->
-                    val imageBytes = stream.readBytes()
-                    val hash = md.digest(imageBytes) // 16 байт
-
-                    // Преобразуем 16 байт в 128 float путем повторения и нормировки
-                    val floatVector = FloatArray(targetSize)
-                    for (i in 0 until targetSize) {
-                        val b = hash[i % hash.size].toInt() and 0xFF // 0..255
-                        floatVector[i] = b / 255.0f // от 0 до 1
-                    }
-                    vectors.add(floatVector)
-                }
-            }
-
-            val avgVector = FloatArray(targetSize) { 0f }
-            for (i in 0 until targetSize) {
-                var sum = 0f
-                for (vec in vectors) {
-                    sum += vec[i]
-                }
-                avgVector[i] = sum / vectors.size
-            }
-
-            val category = appDao.getCategoryById(categoryId)
-                ?: throw Exception("Категория не найдена")
-            val updatedCategory = category.copy(checksum = avgVector)
-            appDao.updateCategory(updatedCategory)
-
-            Result.success(avgVector)
-        } catch (e: Exception) {
-            Result.failure(e)
         }
     }
 }

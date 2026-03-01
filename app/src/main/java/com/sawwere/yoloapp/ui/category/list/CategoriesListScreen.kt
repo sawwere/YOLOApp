@@ -50,12 +50,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.sawwere.yoloapp.YOLOApp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.ui.theme.Neutral100
 import com.sawwere.yoloapp.ui.theme.Neutral300
@@ -83,11 +81,7 @@ import java.util.Locale
 @Composable
 fun CategoriesListScreen(
     onCategoryClick: (Long) -> Unit,
-    viewModel: CategoriesListViewModel = viewModel(
-        factory = CategoriesListViewModel.provideFactory(
-            (LocalContext.current.applicationContext as YOLOApp).appContainer.appRepository
-        )
-    )
+    viewModel: CategoriesListViewModel = hiltViewModel()
 ) {
     val categoriesWithCount by viewModel.categoriesWithCount.collectAsState(emptyList())
 

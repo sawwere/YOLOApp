@@ -5,11 +5,11 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.util.Log
-import androidx.annotation.RequiresApi
+import com.sawwere.yoloapp.core.domain.repository.MediaStoreRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -17,11 +17,14 @@ import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import javax.inject.Inject
 
-class MediaStoreRepository(private val context: Context) {
+class MediaStoreRepositoryImpl @Inject constructor(
+    @ApplicationContext private val context: Context
+): MediaStoreRepository {
 
     companion object {
-        private const val TAG = "MediaStoreRepository"
+        private const val TAG = "MediaStoreRepositoryImpl"
         private const val APP_DIRECTORY = "PhotoCatalog"
         private const val IMAGE_QUALITY = 85
         private const val MAX_IMAGE_WIDTH = 1920
@@ -36,10 +39,10 @@ class MediaStoreRepository(private val context: Context) {
      * @param description Описание изображения (сохраняется в метаданные)
      * @return Uri сохраненного изображения или null в случае ошибки
      */
-    suspend fun saveImageToPublicStorage(
+    override suspend fun saveImageToPublicStorage(
         bitmap: Bitmap,
         categoryName: String,
-        description: String = ""
+        description: String
     ): Uri? {
         return withContext(Dispatchers.IO) {
             try {
@@ -102,7 +105,7 @@ class MediaStoreRepository(private val context: Context) {
      * @param imageUri Uri изображения в MediaStore
      * @return Bitmap или null если не удалось загрузить
      */
-    suspend fun loadImageFromPublicStorage(imageUri: Uri): Bitmap? {
+    override suspend fun loadImageFromPublicStorage(imageUri: Uri): Bitmap? {
         return withContext(Dispatchers.IO) {
             try {
                 val resolver = context.contentResolver
@@ -116,7 +119,7 @@ class MediaStoreRepository(private val context: Context) {
         }
     }
 
-    suspend fun loadImageAsStream(imageUri: Uri, block: (InputStream)->Unit) {
+    override suspend fun loadImageAsStream(imageUri: Uri, block: (InputStream)->Unit) {
         return withContext(Dispatchers.IO) {
             try {
                 val resolver = context.contentResolver
@@ -135,7 +138,7 @@ class MediaStoreRepository(private val context: Context) {
      * @param targetSize Целевой размер миниатюры (квадрат)
      * @return Bitmap миниатюры или null
      */
-    suspend fun loadThumbnail(imageUri: Uri, targetSize: Int = THUMBNAIL_SIZE): Bitmap? {
+    override suspend fun loadThumbnail(imageUri: Uri, targetSize: Int): Bitmap? {
         return withContext(Dispatchers.IO) {
             try {
                 // Используем MediaStore для загрузки миниатюры (если доступно)
@@ -153,7 +156,7 @@ class MediaStoreRepository(private val context: Context) {
      * @param imageUri Uri изображения для удаления
      * @return true если удаление успешно
      */
-    suspend fun deleteImageFromPublicStorage(imageUri: Uri): Boolean {
+    override suspend fun deleteImageFromPublicStorage(imageUri: Uri): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 val resolver = context.contentResolver
@@ -171,7 +174,7 @@ class MediaStoreRepository(private val context: Context) {
      * @param categoryName Название категории
      * @return Список Uri изображений в категории
      */
-    suspend fun getImagesInCategory(categoryName: String): List<Uri> {
+    override suspend fun getImagesInCategory(categoryName: String): List<Uri> {
         return withContext(Dispatchers.IO) {
             val resolver = context.contentResolver
             val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
@@ -222,7 +225,7 @@ class MediaStoreRepository(private val context: Context) {
     /**
      * Проверяет, существует ли изображение в MediaStore
      */
-    suspend fun imageExists(imageUri: Uri): Boolean {
+    override suspend fun imageExists(imageUri: Uri): Boolean {
         return withContext(Dispatchers.IO) {
             try {
                 val resolver = context.contentResolver
@@ -235,7 +238,6 @@ class MediaStoreRepository(private val context: Context) {
     }
 
     // Вспомогательные методы
-
     private fun generateFileName(): String {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
         return "IMG_${timestamp}"
@@ -286,7 +288,7 @@ class MediaStoreRepository(private val context: Context) {
     /**
      * Конвертирует Bitmap в ByteArray
      */
-    fun bitmapToByteArray(bitmap: Bitmap): ByteArray {
+    private fun bitmapToByteArray(bitmap: Bitmap): ByteArray {
         val outputStream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_QUALITY, outputStream)
         return outputStream.toByteArray()
