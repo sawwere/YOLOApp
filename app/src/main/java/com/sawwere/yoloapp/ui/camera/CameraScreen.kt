@@ -68,9 +68,10 @@ fun CameraScreen(
     onBackClick: () -> Unit,
     onCaptureClick: () -> Unit,
     viewModel: CameraScreenViewModel,
-    segmentedBitmap: Bitmap?
 ) {
     val context = LocalContext.current
+
+    val segmentedBitmap = viewModel.segmentedBitmap
 
     val vibrationComponent = VibrationComponent.getFromContext(context)
 

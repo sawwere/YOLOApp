@@ -2,11 +2,15 @@ package com.sawwere.yoloapp.ui.camera
 
 import android.graphics.Bitmap
 import android.util.Log
+import android.widget.Toast
 import androidx.camera.core.Camera
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sawwere.yoloapp.core.detection.DetectionComponent
+import com.sawwere.yoloapp.core.domain.image.DrawImages
 import com.sawwere.yoloapp.core.domain.image.ImageProcessor
 import com.sawwere.yoloapp.core.domain.repository.AppRepository
 import com.sawwere.yoloapp.core.domain.image.ImageUtils
@@ -21,7 +25,8 @@ import kotlinx.coroutines.withContext
 class CameraScreenViewModel (
     private val appRepository: AppRepository,
     private val imageProcessor: ImageProcessor,
-): ViewModel() {
+    private val drawImages: DrawImages
+): ViewModel(), DetectionComponent.InstanceSegmentationListener {
     private lateinit var camera: Camera
 
     private val _preProcessTime = MutableStateFlow(0L)
@@ -40,6 +45,7 @@ class CameraScreenViewModel (
     private val _debugMode = MutableStateFlow(false)
     val debugMode = _debugMode.asStateFlow()
 
+    var segmentedBitmap: Bitmap? by mutableStateOf(null)
 
     private val _capturedBitmap = MutableStateFlow<Bitmap?>(null)
     val capturedBitmap get() = _capturedBitmap.value
@@ -260,5 +266,40 @@ class CameraScreenViewModel (
 
     companion object {
         private const val TAG = "CameraScreenViewModel"
+    }
+
+    override fun onError(error: String) {
+        Log.e(TAG, error) // TODO
+    }
+
+    override fun onEmpty() {
+        segmentedBitmap = null
+    }
+
+    override fun onDetect(
+        interfaceTime: Long,
+        results: List<DetectionComponent.Detection>,
+        preProcessTime: Long,
+        postProcessTime: Long
+    ) {
+        updateTimers(
+            preProcessTime = preProcessTime,
+            inferenceTime = interfaceTime,
+            postProcessTime = postProcessTime
+        )
+
+        // Обновляем информацию о текущих обнаруженных объектах
+        updateDetections(results)
+
+        // Создаем сегментированное изображение для отображения в реальном времени
+        segmentedBitmap = if (results.isEmpty()) {
+            null
+        } else {
+            drawImages(
+                imageWidth = 480,
+                imageHeight = 640,
+                results = results
+            )
+        }
     }
 }

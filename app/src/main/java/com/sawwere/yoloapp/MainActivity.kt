@@ -54,13 +54,12 @@ import java.util.concurrent.Executors
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentationListener {
+class MainActivity : ComponentActivity() {
     // Camera components
     private lateinit var detectionComponent: DetectionComponent
     private lateinit var drawImages: DrawImages
     private lateinit var cameraExecutor: ExecutorService
     private var camera: Camera? = null
-    private var segmentedBitmap: Bitmap? by mutableStateOf(null)
     private var originalBitmap: Bitmap? by mutableStateOf(null)
     private lateinit var viewModel: CameraScreenViewModel
 
@@ -88,7 +87,8 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
         viewModel = CameraScreenViewModel(
             appRepository,
-            imageProcessor
+            imageProcessor,
+            drawImages
         )
 
 
@@ -96,7 +96,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
             context = applicationContext,
             modelPath = "yolov8s_float16.tflite",
             labelPath = null,
-            instanceSegmentationListener = this,
+            instanceSegmentationListener = viewModel,
             message = {
                 Toast.makeText(applicationContext, it, Toast.LENGTH_SHORT).show()
             }
@@ -141,8 +141,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                             onCaptureClick = {
                                 captureCurrentFrame(categoryId)
                             },
-                            viewModel = viewModel,
-                            segmentedBitmap = segmentedBitmap
+                            viewModel = viewModel
                         )
                     }
                 }
@@ -232,41 +231,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
         val bitmapToSave = original.copy(original.config!!, true)
         viewModel.onCapture(bitmapToSave, categoryId)
-    }
-
-    override fun onDetect(
-        interfaceTime: Long,
-        results: List<DetectionComponent.Detection>,
-        preProcessTime: Long,
-        postProcessTime: Long
-    ) {
-        this.viewModel.updateTimers(
-            preProcessTime = preProcessTime,
-            inferenceTime = interfaceTime,
-            postProcessTime = postProcessTime
-        )
-
-        // Обновляем информацию о текущих обнаруженных объектах
-        viewModel.updateDetections(results)
-
-        // Создаем сегментированное изображение для отображения в реальном времени
-        segmentedBitmap = if (results.isEmpty() || originalBitmap == null) {
-            null
-        } else {
-            drawImages(
-                imageWidth = originalBitmap!!.width,
-                imageHeight = originalBitmap!!.height,
-                results = results
-            )
-        }
-    }
-
-    override fun onEmpty() {
-        segmentedBitmap = null
-    }
-
-    override fun onError(error: String) {
-        Toast.makeText(applicationContext, error, Toast.LENGTH_SHORT).show()
     }
 
     override fun onDestroy() {
