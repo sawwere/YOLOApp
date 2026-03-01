@@ -1,18 +1,23 @@
 package com.sawwere.yoloapp.ui.camera
 
 import android.graphics.Bitmap
-import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import androidx.camera.core.Camera
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
+import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import com.sawwere.yoloapp.core.image.ImageUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class CameraScreenViewModel (
     private val appRepository: AppRepository
@@ -35,6 +40,13 @@ class CameraScreenViewModel (
     private val _debugMode = MutableStateFlow(false)
     val debugMode = _debugMode.asStateFlow()
 
+
+    private val _capturedBitmap = MutableStateFlow<Bitmap?>(null)
+    val capturedBitmap get() = _capturedBitmap
+
+
+    private val _detectedBoxes = MutableStateFlow<List<DetectionComponent.Detection>>(emptyList())
+    val detectedBoxes: StateFlow<List<DetectionComponent.Detection>> = _detectedBoxes.asStateFlow()
     // Список обработанных сегментов
     private val _processedSegments = mutableStateOf<List<Bitmap>>(emptyList())
     val processedSegments: List<Bitmap> get() = _processedSegments.value
@@ -64,29 +76,111 @@ class CameraScreenViewModel (
         _debugMode.update { !it }
     }
 
-    fun addProcessedSegment(bitmap: Bitmap, categoryId: Long) {
-        Log.d("ViewModel", "Adding segment. Current count: ${_processedSegments.value.size}")
-        // Создаем новый список с добавленным элементом
-        _processedSegments.value += bitmap
-        Log.d("ViewModel", "Segment added. New count: ${_processedSegments.value.size}")
+    fun onCapture(bitmap: Bitmap, categoryId: Long) {
+        _capturedBitmap.value = bitmap
+        Log.i(
+            TAG,
+            "width=${_capturedBitmap.value!!.width} height=${_capturedBitmap.value!!.height}"
+        )
+        val capturedBoxes = detectedBoxes.value
         viewModelScope.launch(Dispatchers.IO) {
-            saveImageWithMetadata(bitmap, categoryId)
+            val bitmapCopy = bitmap.copy(bitmap.config!!, true)
+            try {
+                appRepository.insertPhoto(categoryId, bitmapCopy)
+                processCapturedSegments(
+                    categoryId = categoryId,
+                    capturedOriginalBitmap = bitmapCopy,
+                    detectionBoxes = capturedBoxes
+                )
+            } finally {
+                if (!bitmapCopy.isRecycled) {
+                    bitmapCopy.recycle()
+                }
+            }
+
         }
     }
 
-    suspend fun saveImageWithMetadata(
-        bitmap: Bitmap,
-        categoryId: Long
-    ): Uri? {
-        return try {
-            val uri = appRepository.insertPhoto(categoryId, bitmap).getOrNull()
-            if (uri != null) {
-                Log.d("ViewModel", "Image saved successfully: $uri")
+    private suspend fun processCapturedSegments(
+        capturedOriginalBitmap: Bitmap,
+        categoryId: Long,
+        detectionBoxes: List<DetectionComponent.Detection>
+    ) {
+        Log.d(TAG, "Starting segment processing...")
+
+        clearAllSegments()
+        if (detectionBoxes.isEmpty()) {
+            Log.d(TAG, "No captured data to process")
+        }
+
+        try {
+            for ((index, detection) in detectionBoxes.withIndex()) {
+                try {
+                    Log.d(TAG, "Processing detection $index")
+
+                    val croppedSegment = ImageUtils.extractRectSegment(capturedOriginalBitmap, detection.bbox)
+                    Log.d(TAG, "Cropped segment for object $index: ${croppedSegment?.width}x${croppedSegment?.height}")
+
+                    if (croppedSegment != null) {
+                        val processedBitmap = processSingleSegment(croppedSegment)
+                        Log.d(TAG, "Processed bitmap for object $index: ${processedBitmap?.width}x${processedBitmap?.height}")
+
+                        if (processedBitmap != null) {
+                            addProcessedSegment(processedBitmap, categoryId)
+                            Log.d(TAG, "Added segment $index to ViewModel")
+                        } else {
+                            Log.w(TAG, "Processed bitmap is null for object $index")
+                        }
+
+                        croppedSegment.recycle()
+                    } else {
+                        Log.w(TAG, "Cropped segment is null for object $index")
+                        Log.w(TAG, "BBox: [${detection.bbox.left}, ${detection.bbox.top}, ${detection.bbox.right}, ${detection.bbox.bottom}]")
+                        Log.w(TAG, "Image size: ${capturedOriginalBitmap.width}x${capturedOriginalBitmap.height}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error processing object $index: ${e.message}", e)
+                }
             }
-            uri
+
+            withContext(Dispatchers.Main) {
+                Log.d(TAG, "Final segment count in ViewModel: ${processedSegments.size}")
+            }
         } catch (e: Exception) {
-            Log.e("ViewModel", "Error saving image: ${e.message}", e)
+            Log.e(TAG, "Error processing captured segments: ${e.message}", e)
+        }
+    }
+
+    private fun processSingleSegment(segmentBitmap: Bitmap): Bitmap? {
+        return try {
+            segmentBitmap.copy(segmentBitmap.config!!, true)
+        } catch (e: Exception) {
+            Log.e("ImageProcessor", "Error in segment processing: ${e.message}")
             null
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        _capturedBitmap.value?.takeIf { !it.isRecycled }?.recycle()
+    }
+
+    fun addProcessedSegment(bitmap: Bitmap, categoryId: Long) {
+        Log.d(TAG, "Adding segment. Current count: ${_processedSegments.value.size}")
+        // Создаем новый список с добавленным элементом
+        _processedSegments.value += bitmap
+        Log.d(TAG, "Segment added. New count: ${_processedSegments.value.size}")
+
+        val bitmapCopy = bitmap.copy(bitmap.config!!, true) ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                appRepository.insertPhoto(categoryId, bitmap)
+            } finally {
+                // Safely recycle the copy after saving (if not already recycled)
+                if (!bitmapCopy.isRecycled) {
+                    bitmapCopy.recycle()
+                }
+            }
         }
     }
 
@@ -129,8 +223,9 @@ class CameraScreenViewModel (
         }
     }
 
-    fun updateDetectionInfo(resultsCount: Int) {
-        _detectedObjectsCount.value = resultsCount
+    fun updateDetections(detections: List<DetectionComponent.Detection>) {
+        _detectedBoxes.value = detections
+        _detectedObjectsCount.value = detections.size  // обновляем и количество
     }
 
     fun setupZoomState(camera: Camera) {
@@ -173,5 +268,9 @@ class CameraScreenViewModel (
         } else {
             0f
         }
+    }
+
+    companion object {
+        private const val TAG = "CameraScreenViewModel"
     }
 }

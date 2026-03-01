@@ -63,7 +63,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
     private var camera: Camera? = null
     private var segmentedBitmap: Bitmap? by mutableStateOf(null)
     private var originalBitmap: Bitmap? by mutableStateOf(null)
-    private var capturedDetections: List<DetectionComponent.Detection> by mutableStateOf(emptyList())
     private lateinit var viewModel: CameraScreenViewModel
 
     // Repositories
@@ -231,93 +230,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
 
         // Создаем комбинированное изображение для сохранения в галерею
         val bitmapToSave = original.copy(original.config!!, true)
-
-        // Сохраняем в галерею
-        lifecycleScope.launch(Dispatchers.IO) {
-            viewModel.saveImageWithMetadata(bitmapToSave, categoryId)
-        }
-
-        // Обрабатываем захваченные сегменты
-        processCapturedSegments(categoryId, bitmapToSave)
-    }
-
-    private fun processCapturedSegments(categoryId: Long, capturedOriginalBitmap: Bitmap?) {
-        Log.d("SegmentDebug", "Starting segment processing...")
-
-        if (capturedOriginalBitmap == null || capturedDetections.isEmpty()) {
-            Log.d("SegmentDebug", "No captured data to process")
-            viewModel.clearAllSegments()
-            runOnUiThread {
-                Toast.makeText(this, "Нет обнаруженных объектов для обработки", Toast.LENGTH_SHORT).show()
-            }
-            return
-        }
-
-        viewModel.clearAllSegments()
-
-        lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                // Обрабатываем каждый обнаруженный объект
-                for ((index, detection) in capturedDetections.withIndex()) {
-                    try {
-                        Log.d("SegmentDebug", "Processing detection $index")
-
-                        val croppedSegment = ImageUtils.extractRectSegment(capturedOriginalBitmap, detection.bbox)
-                        Log.d("SegmentDebug", "Cropped segment for object $index: ${croppedSegment?.width}x${croppedSegment?.height}")
-
-                        if (croppedSegment != null) {
-                            val processedBitmap = processSingleSegment(croppedSegment)
-                            Log.d("SegmentDebug", "Processed bitmap for object $index: ${processedBitmap?.width}x${processedBitmap?.height}")
-
-                            if (processedBitmap != null) {
-                                withContext(Dispatchers.Main) {
-                                    viewModel.addProcessedSegment(processedBitmap, categoryId)
-                                    Log.d("SegmentDebug", "Added segment $index to ViewModel")
-                                }
-                            } else {
-                                Log.w("SegmentDebug", "Processed bitmap is null for object $index")
-                            }
-
-                            croppedSegment.recycle()
-                        } else {
-                            Log.w("SegmentDebug", "Cropped segment is null for object $index")
-                            Log.w("SegmentDebug", "BBox: [${detection.bbox.left}, ${detection.bbox.top}, ${detection.bbox.right}, ${detection.bbox.bottom}]")
-                            Log.w("SegmentDebug", "Image size: ${capturedOriginalBitmap.width}x${capturedOriginalBitmap.height}")
-                        }
-                    } catch (e: Exception) {
-                        Log.e("SegmentDebug", "Error processing object $index: ${e.message}", e)
-                    }
-                }
-
-                withContext(Dispatchers.Main) {
-                    Log.d("SegmentDebug", "Final segment count in ViewModel: ${viewModel.processedSegments.size}")
-                    viewModel.updateDetectionInfo(capturedDetections.size)
-
-                    if (viewModel.processedSegments.isEmpty()) {
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Не удалось обработать ни одного сегмента",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    } else {
-                        Toast.makeText(
-                            this@MainActivity,
-                            "Обработано ${viewModel.processedSegments.size} объектов",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("SegmentDebug", "Error processing captured segments: ${e.message}", e)
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        "Ошибка обработки сегментов: ${e.message}",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-        }
+        viewModel.onCapture(bitmapToSave, categoryId)
     }
 
     override fun onDetect(
@@ -333,7 +246,7 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
         )
 
         // Обновляем информацию о текущих обнаруженных объектах
-        viewModel.updateDetectionInfo(results.size)
+        viewModel.updateDetections(results)
 
         // Создаем сегментированное изображение для отображения в реальном времени
         segmentedBitmap = if (results.isEmpty() || originalBitmap == null) {
@@ -344,18 +257,6 @@ class MainActivity : ComponentActivity(), DetectionComponent.InstanceSegmentatio
                 imageHeight = originalBitmap!!.height,
                 results = results
             )
-        }
-
-        capturedDetections = results
-    }
-
-    private fun processSingleSegment(segmentBitmap: Bitmap): Bitmap? {
-        return try {
-            // Здесь можно добавить дополнительную обработку сегментов, если нужно
-            segmentBitmap
-        } catch (e: Exception) {
-            Log.e("ImageProcessor", "Error in segment processing: ${e.message}")
-            null
         }
     }
 
