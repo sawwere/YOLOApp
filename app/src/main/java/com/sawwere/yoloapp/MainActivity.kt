@@ -1,7 +1,5 @@
 package com.sawwere.yoloapp
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.Bundle
@@ -10,7 +8,6 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -25,14 +22,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sawwere.yoloapp.core.detection.DetectionComponent
-import com.sawwere.yoloapp.ui.camera.CameraScreen
+import com.sawwere.yoloapp.ui.camera.CameraPermissionScreen
 import com.sawwere.yoloapp.ui.camera.CameraScreenViewModel
 import com.sawwere.yoloapp.ui.camera.navigation.CAMERA_SCREEN_ROUTE
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenNavigation
@@ -44,8 +40,6 @@ import com.sawwere.yoloapp.ui.category.list.CategoriesListScreen
 import com.sawwere.yoloapp.ui.category.list.navigation.CATEGORIES_LIST_SCREEN_ROUTE
 import com.sawwere.yoloapp.ui.theme.YOLOAppTheme
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import org.opencv.android.OpenCVLoader
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -113,7 +107,7 @@ class MainActivity : ComponentActivity() {
                         arguments = listOf(navArgument("categoryId") { type = NavType.LongType })
                     ) { backStackEntry ->
                         val categoryId = backStackEntry.arguments?.getLong("categoryId") ?: 0L
-                        CameraScreen(
+                        CameraPermissionScreen(
                             onBackClick = { navController.popBackStack() },
                             onCaptureClick = {
                                 captureCurrentFrame(categoryId)
@@ -123,32 +117,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
-        }
-
-        checkPermission()
-    }
-
-    private fun checkPermission() = lifecycleScope.launch(Dispatchers.IO) {
-        val isGranted = REQUIRED_PERMISSIONS.all {
-            ContextCompat.checkSelfPermission(
-                applicationContext,
-                it
-            ) == PackageManager.PERMISSION_GRANTED
-        }
-        if (isGranted) {
-            // Camera will be started in Compose when PreviewView is available
-        } else {
-            requestPermissionLauncher.launch(REQUIRED_PERMISSIONS)
-        }
-    }
-
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { map ->
-        if (map.all { it.value }) {
-            // Permissions granted, camera will start in Compose
-        } else {
-            Toast.makeText(baseContext, "Camera permission required", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -241,11 +209,5 @@ class MainActivity : ComponentActivity() {
             originalBitmap = rotatedBitmap
             detectionComponent.invoke(rotatedBitmap)
         }
-    }
-
-    companion object {
-        val REQUIRED_PERMISSIONS = arrayOf(
-            Manifest.permission.CAMERA,
-        )
     }
 }

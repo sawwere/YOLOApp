@@ -1,5 +1,6 @@
 package com.sawwere.yoloapp.ui.camera
 
+import android.content.Context
 import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
@@ -54,11 +55,13 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sawwere.yoloapp.MainActivity
+import com.sawwere.yoloapp.R
 import com.sawwere.yoloapp.core.system.VibrationComponent
 
 
@@ -74,11 +77,7 @@ fun CameraScreen(
 
     val vibrationComponent = VibrationComponent.getFromContext(context)
 
-    val preProcessTime = viewModel.preProcessTime.collectAsState()
-    val inferenceTime = viewModel.inferenceTime.collectAsState()
-    val postProcessTime = viewModel.postProcessTime.collectAsState()
-    val zoomProgress = viewModel.zoomProgress.collectAsState()
-    val debugMode = viewModel.debugMode.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     val processedSegments = remember { mutableStateOf(viewModel.processedSegments) }
     val currentSegmentIndex = remember { mutableIntStateOf(viewModel.currentSegmentIndex) }
@@ -151,9 +150,10 @@ fun CameraScreen(
             }
 
             SpeedInfoPanel(
-                preProcessTime = preProcessTime.value,
-                inferenceTime = inferenceTime.value,
-                postProcessTime = postProcessTime.value,
+                context = context,
+                preProcessTime = uiState.preProcessTime,
+                inferenceTime = uiState.inferenceTime,
+                postProcessTime = uiState.postProcessTime,
                 detectedObjects = detectedObjectsCount.value,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -167,21 +167,14 @@ fun CameraScreen(
             }
         }
 
-        if (debugMode.value) {
+        if (uiState.debugMode) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
             ) {
-                Text(
-                    text = "Zoom Control (Debug)",
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-
                 Slider(
-                    value = zoomProgress.value,
+                    value = uiState.zoomProgress,
                     onValueChange = { newProgress ->
                         viewModel.updateCameraZoom(newProgress)
                     },
@@ -197,7 +190,7 @@ fun CameraScreen(
                 )
 
                 Text(
-                    text = "Zoom: ${zoomProgress.value.format(1)}x",
+                    text = "Zoom: ${uiState.zoomProgress.format(1)}x",
                     color = Color.White,
                     fontSize = 12.sp,
                     modifier = Modifier.align(Alignment.CenterHorizontally)
@@ -207,7 +200,7 @@ fun CameraScreen(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        if (debugMode.value) {
+        if (uiState.debugMode) {
             Column(
                 modifier = Modifier
                     .weight(0.5f)
@@ -235,27 +228,6 @@ fun CameraScreen(
                         }
                     } else {
                         Spacer(modifier = Modifier.width(32.dp))
-                    }
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = "Processed Segment (224x224)",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = if (processedSegments.value.isNotEmpty()) {
-                                "Segment ${currentSegmentIndex.intValue + 1}/${processedSegments.value.size}"
-                            } else {
-                                "Нажмите кнопку для захвата"
-                            },
-                            color = if (processedSegments.value.isNotEmpty()) Color.Green else Color.Yellow,
-                            fontSize = 10.sp
-                        )
                     }
 
                     if (processedSegments.value.size > 1) {
@@ -326,7 +298,8 @@ fun CameraScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black)
-                        .border(2.dp,
+                        .border(
+                            2.dp,
                             when {
                                 currentSegment != null -> Color.Green
                                 else -> Color.Yellow
@@ -349,27 +322,16 @@ fun CameraScreen(
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.BottomEnd)
-                                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                    .background(
+                                        Color.Black.copy(alpha = 0.7f),
+                                        RoundedCornerShape(4.dp)
+                                    )
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
                                     text = "${currentSegment!!.width}×${currentSegment!!.height}",
                                     color = Color.White,
                                     fontSize = 10.sp
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "CROPPED",
-                                    color = Color.Yellow,
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         } else {
@@ -407,13 +369,13 @@ fun CameraScreen(
                             Text(
                                 text = if (detectedObjectsCount.value > 0)
                                     "Объекты обнаружены (${detectedObjectsCount.value})"
-                                else "Нет объектов",
+                                else stringResource(R.string.camera_no_objects_found_label),
                                 color = Color.Yellow,
                                 fontSize = 12.sp
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Нажмите кнопку для захвата",
+                                text = stringResource(R.string.camera_press_shutter_button_label),
                                 color = Color.Yellow,
                                 fontSize = 10.sp
                             )
@@ -441,14 +403,14 @@ fun CameraScreen(
                     Icon(
                         imageVector = Icons.Filled.BugReport,
                         contentDescription = "Debug Mode",
-                        tint = if (debugMode.value) Color.Yellow else Color.White,
+                        tint = if (uiState.debugMode) Color.Yellow else Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                 }
 
                 Text(
-                    text = if (debugMode.value) "Debug ON" else "Debug OFF",
-                    color = if (debugMode.value) Color.Yellow else Color.White,
+                    text = if (uiState.debugMode) "Debug ON" else "Debug OFF",
+                    color = if (uiState.debugMode) Color.Yellow else Color.White,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(start = 4.dp)
                 )
@@ -492,6 +454,7 @@ fun CameraScreen(
 
 @Composable
 fun SpeedInfoPanel(
+    context: Context,
     preProcessTime: Long,
     inferenceTime: Long,
     postProcessTime: Long,
@@ -509,14 +472,6 @@ fun SpeedInfoPanel(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(
-                    text = "Processing Info",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = Color.White,
-                    modifier = Modifier.weight(1f)
-                )
-
                 Box(
                     modifier = Modifier
                         .background(
@@ -535,24 +490,24 @@ fun SpeedInfoPanel(
             }
 
             SpeedInfoRow(
-                label = "Preprocess: ",
+                label = context.getString(R.string.camera_preprocess_label),
                 value = "${preProcessTime}ms",
                 color = Color(0xFF4CAF50)
             )
             SpeedInfoRow(
-                label = "Inference: ",
+                label = context.getString(R.string.camera_inference_label),
                 value = "${inferenceTime}ms",
                 color = Color(0xFF2196F3)
             )
             SpeedInfoRow(
-                label = "Postprocess: ",
+                label = context.getString(R.string.camera_postprocess_label),
                 value = "${postProcessTime}ms",
                 color = Color(0xFFFF9800)
             )
 
             val totalTime = preProcessTime + inferenceTime + postProcessTime
             SpeedInfoRow(
-                label = "Total: ",
+                label = context.getString(R.string.camera_total_time_label),
                 value = "${totalTime}ms",
                 color = Color.White,
                 fontWeight = FontWeight.Bold

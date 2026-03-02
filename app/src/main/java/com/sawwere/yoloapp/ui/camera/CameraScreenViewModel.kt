@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.camera.core.Camera
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -23,6 +24,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+data class CameraScreenUIState(
+    val preProcessTime: Long = 0L,
+    val inferenceTime: Long = 0L,
+    val postProcessTime: Long = 0L,
+    val debugMode: Boolean = false,
+    val zoomProgress: Float = 0f
+)
+
 @HiltViewModel
 class CameraScreenViewModel @Inject constructor(
     private val appRepository: AppRepository,
@@ -31,21 +40,8 @@ class CameraScreenViewModel @Inject constructor(
 ): ViewModel(), DetectionComponent.InstanceSegmentationListener {
     private lateinit var camera: Camera
 
-    private val _preProcessTime = MutableStateFlow(0L)
-    val preProcessTime = _preProcessTime.asStateFlow()
-
-    private val _inferenceTime = MutableStateFlow(0L)
-    val inferenceTime = _inferenceTime.asStateFlow()
-
-    private val _postProcessTime = MutableStateFlow(0L)
-    val postProcessTime = _postProcessTime.asStateFlow()
-
-    private val _zoomProgress = MutableStateFlow(0f)
-    val zoomProgress = _zoomProgress.asStateFlow()
-
-    // Состояние для режима отладки
-    private val _debugMode = MutableStateFlow(false)
-    val debugMode = _debugMode.asStateFlow()
+    private val _uiState = MutableStateFlow(CameraScreenUIState())
+    val uiState: StateFlow<CameraScreenUIState> = _uiState.asStateFlow()
 
     var segmentedBitmap: Bitmap? by mutableStateOf(null)
 
@@ -59,8 +55,8 @@ class CameraScreenViewModel @Inject constructor(
     val processedSegments: List<Bitmap> get() = _processedSegments.value
 
     // Текущий индекс отображаемого сегмента
-    private val _currentSegmentIndex = mutableStateOf(0)
-    val currentSegmentIndex: Int get() = _currentSegmentIndex.value
+    private val _currentSegmentIndex = mutableIntStateOf(0)
+    val currentSegmentIndex: Int get() = _currentSegmentIndex.intValue
 
     // Количество найденных объектов
     private val _detectedObjectsCount = MutableStateFlow(0)
@@ -69,18 +65,22 @@ class CameraScreenViewModel @Inject constructor(
     private var minZoomRatio = 1f
     private var maxZoomRatio = 1f
 
-    fun updateTimers(
+    private fun updateTimers(
         preProcessTime: Long,
         inferenceTime: Long,
-        postProcessTime: Long,
+        postProcessTime: Long
     ) {
-        _inferenceTime.update { inferenceTime }
-        _preProcessTime.update { preProcessTime }
-        _postProcessTime.update { postProcessTime }
+        _uiState.update { currentState ->
+            currentState.copy(
+                preProcessTime = preProcessTime,
+                inferenceTime = inferenceTime,
+                postProcessTime = postProcessTime
+            )
+        }
     }
 
     fun toggleDebugMode() {
-        _debugMode.update { !it }
+        _uiState.update { it.copy(debugMode = !it.debugMode) }
     }
 
     fun onCapture(bitmap: Bitmap, categoryId: Long) {
@@ -193,20 +193,20 @@ class CameraScreenViewModel @Inject constructor(
             }
         }
         _processedSegments.value = emptyList()
-        _currentSegmentIndex.value = 0
+        _currentSegmentIndex.intValue = 0
         Log.d(TAG, "All segments cleared")
     }
 
     fun nextSegment() {
         if (processedSegments.size > 1) {
-            _currentSegmentIndex.value = (currentSegmentIndex + 1) % processedSegments.size
+            _currentSegmentIndex.intValue = (currentSegmentIndex + 1) % processedSegments.size
         }
     }
 
     fun previousSegment() {
         if (_processedSegments.value.size > 1) {
-            _currentSegmentIndex.value = if (_currentSegmentIndex.value - 1 >= 0) {
-                _currentSegmentIndex.value - 1
+            _currentSegmentIndex.intValue = if (_currentSegmentIndex.intValue - 1 >= 0) {
+                _currentSegmentIndex.intValue - 1
             } else {
                 _processedSegments.value.size - 1
             }
@@ -215,7 +215,7 @@ class CameraScreenViewModel @Inject constructor(
 
     fun setSegmentIndex(index: Int) {
         if (index in 0 until _processedSegments.value.size) {
-            _currentSegmentIndex.value = index
+            _currentSegmentIndex.intValue = index
         }
     }
 
@@ -231,14 +231,15 @@ class CameraScreenViewModel @Inject constructor(
         zoomState?.let {
             minZoomRatio = zoomState.minZoomRatio
             maxZoomRatio = zoomState.maxZoomRatio
-            _zoomProgress.update { calculateZoomProgress(zoomState.zoomRatio) }
+            val initialProgress = calculateZoomProgress(zoomState.zoomRatio)
+            _uiState.update { it.copy(zoomProgress = initialProgress) }
         }
     }
 
     fun updateCameraZoom(newZoomValue: Float) {
-        _zoomProgress.update { newZoomValue }
+        _uiState.update { it.copy(zoomProgress = newZoomValue) }
         camera.let { cam ->
-            val newZoomRatio = minZoomRatio + (_zoomProgress.value / 10f) * (maxZoomRatio - minZoomRatio)
+            val newZoomRatio = minZoomRatio + (newZoomValue / 10f) * (maxZoomRatio - minZoomRatio)
             cam.cameraControl.setZoomRatio(newZoomRatio)
         }
     }
@@ -248,13 +249,10 @@ class CameraScreenViewModel @Inject constructor(
             val zoomState = cam.cameraInfo.zoomState.value ?: return
             val currentZoom = zoomState.zoomRatio
             val newZoom = currentZoom * scaleFactor
-
-            // Ограничиваем зум минимальным/максимальным значением
             val clampedZoom = newZoom.coerceIn(minZoomRatio, maxZoomRatio)
-
-            // Обновляем состояние зума
             cam.cameraControl.setZoomRatio(clampedZoom)
-            _zoomProgress.update { calculateZoomProgress(clampedZoom) }
+            val newProgress = calculateZoomProgress(clampedZoom)
+            _uiState.update { it.copy(zoomProgress = newProgress) }
         }
     }
 

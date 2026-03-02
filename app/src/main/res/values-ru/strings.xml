@@ -1,13 +1,12 @@
 <resources>
     <string name="app_name">YOLO-Android-Tool</string>
-    <string name="speed_info">Скорость (в миллисекундах)</string>
-    <string name="preprocess_label">Предобработка: </string>
-    <string name="inference_label">Инференс: </string>
-    <string name="postprocess_label">Постобработка: </string>
+    <string name="camera_preprocess_label">Предобработка: </string>
+    <string name="camera_inference_label">Инференс: </string>
+    <string name="camera_postprocess_label">"Postprocess: "</string>
+    <string name="camera_total_time_label">Постобработка: </string>
     <string name="image_saved">Изображение сохранено в Pictures</string>
     <string name="error_saving">Ошибка сохранения: %1$s</string>
     <string name="no_image">Нет изображения для сохранения</string>
-    <string name="capture_button">Снять</string>
     <string name="folder_name">YOLO-App</string>
     <string name="category_datail_delete_photo_title">Удалить фото?</string>
     <string name="category_detail_delete_photo_confirmation">Вы уверены, что хотите удалить это фото? Действие необратимо.</string>
@@ -25,4 +24,9 @@
     <string name="ui_common_return">Назад</string>
     <string name="category_detail_couldnt_open_image_error">Не удалось открыть изображение</string>
     <string name="category_detail_check_button">Проверка</string>
+    <string name="camera_no_objects_found_label">No objects found</string>
+    <string name="camera_press_shutter_button_label">Нажмите кнопку для захвата</string>
+    <string name="ui_common_open_settings">Открыть настройки</string>
+    <string name="camera_no_permission_given_label">Разрешение на камеру отключено. Включите его в настройках, чтобы продолжить.</string>
+    <string name="camera_request_permission_label">Камера необходима для съёмки фотографий. Пожалуйста, предоставьте разрешение.</string>
 </resources>

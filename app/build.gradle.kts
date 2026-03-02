@@ -70,7 +70,8 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation("androidx.compose.material3:material3-window-size-class")
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.androidx.material.icons.extended)
+    implementation(libs.accompanist.permissions)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.hilt.android)
     implementation(libs.androidx.hilt.navigation.compose)
@@ -78,9 +79,9 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
 
-    implementation("org.tensorflow:tensorflow-lite:2.16.1")
-    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
-    implementation("org.tensorflow:tensorflow-lite-metadata:0.4.4")
+    implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.support)
+    implementation(libs.tensorflow.lite.metadata)
 
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)
@@ -89,5 +90,5 @@ dependencies {
 
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
-    kapt(libs.androidx.room.compiler)
+    ksp(libs.androidx.room.compiler)
 }
