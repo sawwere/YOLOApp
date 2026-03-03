@@ -9,7 +9,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -31,6 +30,7 @@ import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.ui.camera.CameraPermissionScreen
 import com.sawwere.yoloapp.ui.camera.CameraScreenViewModel
 import com.sawwere.yoloapp.ui.camera.navigation.CAMERA_SCREEN_ROUTE
+import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenMode
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenNavigation
 import com.sawwere.yoloapp.ui.category.detail.CategoryDetailScreen
 import com.sawwere.yoloapp.ui.category.detail.navigation.CATEGORY_DETAILS_SCREEN_ROUTE
@@ -43,12 +43,13 @@ import dagger.hilt.android.AndroidEntryPoint
 import org.opencv.android.OpenCVLoader
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private lateinit var detectionComponent: DetectionComponent
+    @Inject
+    lateinit var detectionComponent: DetectionComponent
     private lateinit var cameraExecutor: ExecutorService
-    private var camera: Camera? = null
     private var originalBitmap: Bitmap? by mutableStateOf(null)
     private val viewModel: CameraScreenViewModel by viewModels()
 
@@ -64,13 +65,6 @@ class MainActivity : ComponentActivity() {
         }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
-
-        detectionComponent = DetectionComponent(
-            context = applicationContext,
-            modelPath = "yolov8s_float16.tflite",
-            labelPath = null,
-            instanceSegmentationListener = viewModel,
-        )
 
         enableEdgeToEdge()
         setContent {
@@ -95,24 +89,39 @@ class MainActivity : ComponentActivity() {
                         CategoryDetailScreen(
                             onBackClick = { navController.popBackStack() },
                             onAddPhotoClick = {
-                                navController.navigate(CameraScreenNavigation.passId(categoryId))
+                                navController.navigate(
+                                    CameraScreenNavigation.passArgs(
+                                        categoryId,
+                                        CameraScreenMode.ADD
+                                ))
                             },
                             onCheckClick = {
-                                Toast.makeText(this@MainActivity, "Запуск проверки...", Toast.LENGTH_SHORT).show()
+                                navController.navigate(
+                                    CameraScreenNavigation.passArgs(
+                                        categoryId,
+                                        CameraScreenMode.CHECK
+                                ))
                             }
                         )
                     }
                     composable(
                         route = CAMERA_SCREEN_ROUTE,
-                        arguments = listOf(navArgument("categoryId") { type = NavType.LongType })
+                        arguments = listOf(
+                            navArgument(CameraScreenNavigation.CATEGORY_ID_ARG) { type = NavType.LongType },
+                            navArgument(CameraScreenNavigation.MODE_ARG) { type = NavType.StringType }
+                        )
                     ) { backStackEntry ->
-                        val categoryId = backStackEntry.arguments?.getLong("categoryId") ?: 0L
+                        val categoryId = backStackEntry.arguments?.getLong(CATEGORY_ID_ARG) ?: 0L
+                        val mode = backStackEntry.arguments
+                            ?.getString(CameraScreenNavigation.MODE_ARG)
+                            ?: CameraScreenMode.ADD.value
+                        viewModel.drawMode = mode
                         CameraPermissionScreen(
                             onBackClick = { navController.popBackStack() },
                             onCaptureClick = {
                                 captureCurrentFrame(categoryId)
                             },
-                            viewModel = viewModel
+                            viewModel = viewModel,
                         )
                     }
                 }
@@ -155,13 +164,13 @@ class MainActivity : ComponentActivity() {
 
             try {
                 cameraProvider.unbindAll()
-                camera = cameraProvider.bindToLifecycle(
+                val camera = cameraProvider.bindToLifecycle(
                     this,
                     cameraSelector,
                     preview,
                     imageAnalyzer
                 )
-                viewModel.setupZoomState(camera!!)
+                viewModel.setupZoomState(camera)
             } catch (exc: Exception) {
                 Log.e("CameraX", "Use case binding failed", exc)
             }

@@ -63,6 +63,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.sawwere.yoloapp.MainActivity
 import com.sawwere.yoloapp.R
 import com.sawwere.yoloapp.core.system.VibrationComponent
+import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenMode
 
 
 @Composable
@@ -387,59 +388,61 @@ fun CameraScreen(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Row(
-                modifier = Modifier.align(Alignment.CenterStart),
-                verticalAlignment = Alignment.CenterVertically
+        if (uiState.drawMode == CameraScreenMode.ADD.value) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
-                IconButton(
-                    onClick = { viewModel.toggleDebugMode() },
-                    modifier = Modifier.size(40.dp)
+                Row(
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.BugReport,
-                        contentDescription = "Debug Mode",
-                        tint = if (uiState.debugMode) Color.Yellow else Color.White,
-                        modifier = Modifier.size(20.dp)
+                    IconButton(
+                        onClick = { viewModel.toggleDebugMode() },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.BugReport,
+                            contentDescription = "Debug Mode",
+                            tint = if (uiState.debugMode) Color.Yellow else Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Text(
+                        text = if (uiState.debugMode) "Debug ON" else "Debug OFF",
+                        color = if (uiState.debugMode) Color.Yellow else Color.White,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(start = 4.dp)
                     )
                 }
 
-                Text(
-                    text = if (uiState.debugMode) "Debug ON" else "Debug OFF",
-                    color = if (uiState.debugMode) Color.Yellow else Color.White,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(start = 4.dp)
+                ShutterButton(
+                    onClick = {
+                        onCaptureClick()
+                        vibrationComponent.triggerHapticFeedback()
+                    },
+                    modifier = Modifier.align(Alignment.Center)
                 )
-            }
 
-            ShutterButton(
-                onClick = {
-                    onCaptureClick()
-                    vibrationComponent.triggerHapticFeedback()
-                },
-                modifier = Modifier.align(Alignment.Center)
-            )
-
-            Box(
-                modifier = Modifier.align(Alignment.CenterEnd)
-            ) {
-                if (processedSegments.value.isNotEmpty()) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = "Segments Captured",
-                            tint = Color.Green,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Text(
-                            text = "${processedSegments.value.size}",
-                            color = Color.Green,
-                            fontSize = 10.sp
-                        )
+                Box(
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                ) {
+                    if (processedSegments.value.isNotEmpty()) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = "Segments Captured",
+                                tint = Color.Green,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Text(
+                                text = "${processedSegments.value.size}",
+                                color = Color.Green,
+                                fontSize = 10.sp
+                            )
+                        }
                     }
                 }
             }

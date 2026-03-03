@@ -1,5 +1,6 @@
 package com.sawwere.yoloapp.ui.camera
 
+import androidx.lifecycle.SavedStateHandle
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.camera.core.Camera
@@ -14,6 +15,8 @@ import com.sawwere.yoloapp.core.domain.image.DrawImages
 import com.sawwere.yoloapp.core.domain.image.ImageProcessor
 import com.sawwere.yoloapp.core.domain.repository.AppRepository
 import com.sawwere.yoloapp.core.domain.image.ImageUtils
+import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenMode
+import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenNavigation
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,19 +32,39 @@ data class CameraScreenUIState(
     val inferenceTime: Long = 0L,
     val postProcessTime: Long = 0L,
     val debugMode: Boolean = false,
-    val zoomProgress: Float = 0f
+    val zoomProgress: Float = 0f,
+    val drawMode: String = CameraScreenMode.ADD.value
 )
 
 @HiltViewModel
 class CameraScreenViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val appRepository: AppRepository,
     private val imageProcessor: ImageProcessor,
-    private val drawImages: DrawImages
+    private val drawImages: DrawImages,
+    private val detectionComponent: DetectionComponent,
 ): ViewModel(), DetectionComponent.InstanceSegmentationListener {
+    init {
+        detectionComponent.subscrube(this)
+    }
+
     private lateinit var camera: Camera
 
     private val _uiState = MutableStateFlow(CameraScreenUIState())
     val uiState: StateFlow<CameraScreenUIState> = _uiState.asStateFlow()
+
+    var drawMode: String = savedStateHandle[CameraScreenNavigation.MODE_ARG]
+        ?: CameraScreenMode.ADD.value.also {
+            Log.w(
+                TAG,
+                " ${CameraScreenNavigation.MODE_ARG} argument not passed, " +
+                        "switching to default value: ${CameraScreenMode.ADD}"
+            )
+        }
+        set(value) {
+            field = value
+            _uiState.update { it.copy(drawMode = value) }
+        }
 
     var segmentedBitmap: Bitmap? by mutableStateOf(null)
 
@@ -287,8 +310,6 @@ class CameraScreenViewModel @Inject constructor(
             inferenceTime = interfaceTime,
             postProcessTime = postProcessTime
         )
-
-        // Обновляем информацию о текущих обнаруженных объектах
         updateDetections(results)
 
         // Создаем сегментированное изображение для отображения в реальном времени
@@ -298,7 +319,8 @@ class CameraScreenViewModel @Inject constructor(
             drawImages(
                 imageWidth = 480,
                 imageHeight = 640,
-                results = results
+                results = results,
+                drawOverlay = drawMode == CameraScreenMode.CHECK.value
             )
         }
     }

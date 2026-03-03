@@ -14,12 +14,13 @@ import org.tensorflow.lite.support.common.ops.NormalizeOp
 import org.tensorflow.lite.support.image.ImageProcessor
 import org.tensorflow.lite.support.image.TensorImage
 import java.nio.ByteBuffer
+import javax.inject.Singleton
 
+@Singleton
 class DetectionComponent(
     context: Context,
     modelPath: String,
     labelPath: String?,
-    private val instanceSegmentationListener: InstanceSegmentationListener,
 ) {
     private var interpreter: Interpreter
     private var labels = mutableListOf<String>()
@@ -31,6 +32,8 @@ class DetectionComponent(
     private var xPoints = 0
     private var yPoints = 0
     private var masksNum = 0
+
+    private val listeners: MutableList<InstanceSegmentationListener> = mutableListOf()
 
     private val imageProcessor = ImageProcessor.Builder()
         .add(NormalizeOp(INPUT_MEAN, INPUT_STANDARD_DEVIATION))
@@ -100,6 +103,12 @@ class DetectionComponent(
 //
 //            }
 //        }
+    }
+
+    fun subscrube(
+        listener: InstanceSegmentationListener
+    ) {
+        listeners.add(listener)
     }
 
     fun close() {
@@ -174,12 +183,14 @@ class DetectionComponent(
 
         postProcessTime = SystemClock.uptimeMillis() - postProcessTime
 
-        instanceSegmentationListener.onDetect(
-            preProcessTime = preProcessTime,
-            interfaceTime = interfaceTime,
-            postProcessTime = postProcessTime,
-            results = segmentationResults
-        )
+        listeners.forEach {
+            it.onDetect(
+                preProcessTime = preProcessTime,
+                interfaceTime = interfaceTime,
+                postProcessTime = postProcessTime,
+                results = segmentationResults
+            )
+        }
     }
 
     private fun processOutput(
