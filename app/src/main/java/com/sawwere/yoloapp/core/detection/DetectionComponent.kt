@@ -188,7 +188,8 @@ class DetectionComponent(
                 preProcessTime = preProcessTime,
                 interfaceTime = interfaceTime,
                 postProcessTime = postProcessTime,
-                results = segmentationResults
+                results = segmentationResults,
+                originalBitmap = frame
             )
         }
     }
@@ -238,7 +239,8 @@ class DetectionComponent(
             interfaceTime: Long,
             results: List<Detection>,
             preProcessTime: Long,
-            postProcessTime: Long
+            postProcessTime: Long,
+            originalBitmap: Bitmap
         )
     }
 
@@ -252,7 +254,7 @@ class DetectionComponent(
     }
 
     data class Detection(
-        val classId: Int,
+        var classId: Int,
         val confidence: Float,
         val bbox: RectF // [left, top, right, bottom] в пикселях
     )

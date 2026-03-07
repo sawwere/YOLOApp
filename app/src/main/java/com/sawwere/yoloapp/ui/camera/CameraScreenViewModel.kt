@@ -17,6 +17,7 @@ import com.sawwere.yoloapp.core.domain.repository.AppRepository
 import com.sawwere.yoloapp.core.domain.image.ImageUtils
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenMode
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenNavigation
+import com.sawwere.yoloapp.ui.camera.usecase.ValidateObject
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +25,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 data class CameraScreenUIState(
@@ -43,6 +43,7 @@ class CameraScreenViewModel @Inject constructor(
     private val imageProcessor: ImageProcessor,
     private val drawImages: DrawImages,
     private val detectionComponent: DetectionComponent,
+    private val validateObject: ValidateObject
 ): ViewModel(), DetectionComponent.InstanceSegmentationListener {
     init {
         detectionComponent.subscrube(this)
@@ -74,8 +75,8 @@ class CameraScreenViewModel @Inject constructor(
     private val _detectedBoxes = MutableStateFlow<List<DetectionComponent.Detection>>(emptyList())
     val detectedBoxes: StateFlow<List<DetectionComponent.Detection>> = _detectedBoxes.asStateFlow()
     // Список обработанных сегментов
-    private val _processedSegments = mutableStateOf<List<Bitmap>>(emptyList())
-    val processedSegments: List<Bitmap> get() = _processedSegments.value
+    private val _capturedSegments = mutableStateOf<List<Bitmap>>(emptyList())
+    val capturedSegments: List<Bitmap> get() = _capturedSegments.value
 
     // Текущий индекс отображаемого сегмента
     private val _currentSegmentIndex = mutableIntStateOf(0)
@@ -88,10 +89,11 @@ class CameraScreenViewModel @Inject constructor(
     private var minZoomRatio = 1f
     private var maxZoomRatio = 1f
 
-    private fun updateTimers(
+    private fun updateDetectionState(
         preProcessTime: Long,
         inferenceTime: Long,
-        postProcessTime: Long
+        postProcessTime: Long,
+        detectionResults: List<DetectionComponent.Detection>
     ) {
         _uiState.update { currentState ->
             currentState.copy(
@@ -100,6 +102,8 @@ class CameraScreenViewModel @Inject constructor(
                 postProcessTime = postProcessTime
             )
         }
+        _detectedBoxes.value = detectionResults
+        _detectedObjectsCount.value = detectionResults.size
     }
 
     fun toggleDebugMode() {
@@ -116,12 +120,12 @@ class CameraScreenViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val bitmapCopy = bitmap.copy(bitmap.config!!, true)
             try {
-                appRepository.insertPhoto(categoryId, bitmapCopy)
                 processCapturedSegments(
-                    categoryId = categoryId,
-                    capturedOriginalBitmap = bitmapCopy,
+                    originalBitmap = bitmapCopy,
                     detectionBoxes = capturedBoxes
-                )
+                ).forEach {
+                    addProcessedSegment(it, categoryId)
+                }
             } finally {
                 if (!bitmapCopy.isRecycled) {
                     bitmapCopy.recycle()
@@ -131,11 +135,10 @@ class CameraScreenViewModel @Inject constructor(
         }
     }
 
-    private suspend fun processCapturedSegments(
-        capturedOriginalBitmap: Bitmap,
-        categoryId: Long,
+    private fun processCapturedSegments(
+        originalBitmap: Bitmap,
         detectionBoxes: List<DetectionComponent.Detection>
-    ) {
+    ): List<Bitmap> {
         Log.d(TAG, "Starting segment processing...")
 
         clearAllSegments()
@@ -143,39 +146,39 @@ class CameraScreenViewModel @Inject constructor(
             Log.d(TAG, "No captured data to process")
         }
 
+        val result = mutableListOf<Bitmap>()
         try {
             for ((index, detection) in detectionBoxes.withIndex()) {
                 try {
                     Log.d(TAG, "Processing detection $index")
 
-                    val croppedSegment = ImageUtils.extractRectSegment(capturedOriginalBitmap, detection.bbox)
+                    val croppedSegment = ImageUtils.extractRectSegment(originalBitmap, detection.bbox)
 
                     if (croppedSegment != null) {
-                        addProcessedSegment(croppedSegment.copy(croppedSegment.config!!, true), categoryId)
+                        result.add(croppedSegment.copy(croppedSegment.config!!, true))
                         val processedBitmap = processSingleSegment(croppedSegment)
                         Log.d(
                             TAG,
                             "Processed bitmap for object $index: ${processedBitmap.width}x${processedBitmap.height}"
                         )
-                        addProcessedSegment(processedBitmap, categoryId)
+                        result.add(processedBitmap)
+                        //addProcessedSegment(processedBitmap, categoryId)
 
                         croppedSegment.recycle()
                     } else {
                         Log.w(TAG, "Cropped segment is null for object $index")
                         Log.w(TAG, "BBox: [${detection.bbox.left}, ${detection.bbox.top}, ${detection.bbox.right}, ${detection.bbox.bottom}]")
-                        Log.w(TAG, "Image size: ${capturedOriginalBitmap.width}x${capturedOriginalBitmap.height}")
+                        Log.w(TAG, "Image size: ${originalBitmap.width}x${originalBitmap.height}")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing object $index: ${e.message}", e)
                 }
             }
-
-            withContext(Dispatchers.Main) {
-                Log.d(TAG, "Final segment count in ViewModel: ${processedSegments.size}")
-            }
         } catch (e: Exception) {
             Log.e(TAG, "Error processing captured segments: ${e.message}", e)
         }
+
+        return result
     }
 
     private fun processSingleSegment(segmentBitmap: Bitmap): Bitmap {
@@ -190,9 +193,9 @@ class CameraScreenViewModel @Inject constructor(
     }
 
     private fun addProcessedSegment(bitmap: Bitmap, categoryId: Long) {
-        Log.d(TAG, "Adding segment. Current count: ${_processedSegments.value.size}")
-        _processedSegments.value += bitmap
-        Log.d(TAG, "Segment added. New count: ${_processedSegments.value.size}")
+        Log.d(TAG, "Adding segment. Current count: ${_capturedSegments.value.size}")
+        _capturedSegments.value += bitmap
+        Log.d(TAG, "Segment added. New count: ${_capturedSegments.value.size}")
 
         val bitmapCopy = bitmap.copy(bitmap.config!!, true) ?: return
         viewModelScope.launch(Dispatchers.IO) {
@@ -208,43 +211,38 @@ class CameraScreenViewModel @Inject constructor(
     }
 
     fun clearAllSegments() {
-        _processedSegments.value.forEach {
+        _capturedSegments.value.forEach {
             try {
                 it.recycle()
             } catch (e: Exception) {
                 Log.e(TAG, "Error recycling bitmap", e)
             }
         }
-        _processedSegments.value = emptyList()
+        _capturedSegments.value = emptyList()
         _currentSegmentIndex.intValue = 0
         Log.d(TAG, "All segments cleared")
     }
 
     fun nextSegment() {
-        if (processedSegments.size > 1) {
-            _currentSegmentIndex.intValue = (currentSegmentIndex + 1) % processedSegments.size
+        if (capturedSegments.size > 1) {
+            _currentSegmentIndex.intValue = (currentSegmentIndex + 1) % capturedSegments.size
         }
     }
 
     fun previousSegment() {
-        if (_processedSegments.value.size > 1) {
+        if (_capturedSegments.value.size > 1) {
             _currentSegmentIndex.intValue = if (_currentSegmentIndex.intValue - 1 >= 0) {
                 _currentSegmentIndex.intValue - 1
             } else {
-                _processedSegments.value.size - 1
+                _capturedSegments.value.size - 1
             }
         }
     }
 
     fun setSegmentIndex(index: Int) {
-        if (index in 0 until _processedSegments.value.size) {
+        if (index in 0 until _capturedSegments.value.size) {
             _currentSegmentIndex.intValue = index
         }
-    }
-
-    fun updateDetections(detections: List<DetectionComponent.Detection>) {
-        _detectedBoxes.value = detections
-        _detectedObjectsCount.value = detections.size
     }
 
     fun setupZoomState(camera: Camera) {
@@ -303,14 +301,28 @@ class CameraScreenViewModel @Inject constructor(
         interfaceTime: Long,
         results: List<DetectionComponent.Detection>,
         preProcessTime: Long,
-        postProcessTime: Long
+        postProcessTime: Long,
+        originalBitmap: Bitmap
     ) {
-        updateTimers(
+        updateDetectionState(
             preProcessTime = preProcessTime,
             inferenceTime = interfaceTime,
-            postProcessTime = postProcessTime
+            postProcessTime = postProcessTime,
+            detectionResults = results
         )
-        updateDetections(results)
+
+        val processedDetections = processCapturedSegments(
+            originalBitmap = originalBitmap,
+            detectionBoxes = results
+        )
+
+        for ((index, detection) in processedDetections.withIndex()) {
+            val res = validateObject(detection)
+            results[index / 2].classId = when(res) {
+                ValidateObject.ValidationResult.SUCCESS -> 0
+                ValidateObject.ValidationResult.FORGERY -> 1
+            }
+        }
 
         // Создаем сегментированное изображение для отображения в реальном времени
         segmentedBitmap = if (results.isEmpty()) {

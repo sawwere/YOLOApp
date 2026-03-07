@@ -80,11 +80,11 @@ fun CameraScreen(
 
     val uiState by viewModel.uiState.collectAsState()
 
-    val processedSegments = remember { mutableStateOf(viewModel.processedSegments) }
+    val processedSegments = remember { mutableStateOf(viewModel.capturedSegments) }
     val currentSegmentIndex = remember { mutableIntStateOf(viewModel.currentSegmentIndex) }
 
     LaunchedEffect(Unit) {
-        snapshotFlow { viewModel.processedSegments }
+        snapshotFlow { viewModel.capturedSegments }
             .collect { newSegments ->
                 processedSegments.value = newSegments
             }

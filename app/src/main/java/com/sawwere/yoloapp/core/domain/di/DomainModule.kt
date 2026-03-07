@@ -4,6 +4,8 @@ import android.content.Context
 import com.sawwere.yoloapp.core.domain.image.DrawImages
 import com.sawwere.yoloapp.core.domain.image.ImageProcessor
 import com.sawwere.yoloapp.core.domain.service.usecase.RecalculateChecksumImpl
+import com.sawwere.yoloapp.core.domain.service.usecase.ValidateObjectImpl
+import com.sawwere.yoloapp.ui.camera.usecase.ValidateObject
 import com.sawwere.yoloapp.ui.category.detail.usecase.RecalculateChecksum
 import dagger.Binds
 import dagger.Module
@@ -20,6 +22,11 @@ abstract class DomainModule {
     abstract fun bindRecalculateChecksum(
         impl: RecalculateChecksumImpl
     ): RecalculateChecksum
+
+    @Binds
+    abstract fun bindValidateObject(
+        impl: ValidateObjectImpl
+    ): ValidateObject
 }
 
 @Module

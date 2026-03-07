@@ -5,9 +5,9 @@
 
     <!--    Box colors-->
     <color name="overlay_blue">#3F51B5</color>
-    <color name="overlay_green">#009688</color>
+    <color name="overlay_green">#7F00FF00</color>
     <color name="overlay_red">#E53935</color>
-    <color name="overlay_orange">#FF5722</color>
+    <color name="overlay_orange">#80FF5722</color>
     <color name="overlay_purple">#9C27B0</color>
     <color name="overlay_pink">#C2185B</color>
     <color name="overlay_cyan">#00BCD4</color>

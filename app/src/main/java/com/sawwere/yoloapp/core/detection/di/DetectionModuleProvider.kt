@@ -7,11 +7,13 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 class DetectionModuleProvider {
     @Provides
+    @Singleton
     fun provideDetectionComponent(
         @ApplicationContext context: Context,
     ): DetectionComponent = DetectionComponent(

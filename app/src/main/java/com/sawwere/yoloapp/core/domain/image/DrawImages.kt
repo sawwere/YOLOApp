@@ -17,9 +17,8 @@ import javax.inject.Singleton
 class DrawImages(private val context: Context) {
 
     private val boxColors = listOf(
-        R.color.overlay_orange,
-        R.color.overlay_blue,
         R.color.overlay_green,
+        R.color.overlay_orange,
         R.color.overlay_red,
         R.color.overlay_pink,
         R.color.overlay_cyan,
@@ -71,7 +70,7 @@ class DrawImages(private val context: Context) {
             val color = ContextCompat.getColor(context, colorRes)
 
             boxStrokePaint.color = color
-            boxFillPaint.color = color and 0xFFFFFF or 0x33000000
+            boxFillPaint.color = color
             textBackgroundPaint.color = color
 
             if (drawOverlay) {
