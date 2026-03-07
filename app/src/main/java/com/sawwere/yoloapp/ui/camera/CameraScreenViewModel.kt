@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sawwere.yoloapp.core.config.EmulatorUtils
 import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.domain.image.DrawImages
 import com.sawwere.yoloapp.core.domain.image.ImageProcessor
@@ -119,6 +120,9 @@ class CameraScreenViewModel @Inject constructor(
         val capturedBoxes = detectedBoxes.value
         viewModelScope.launch(Dispatchers.IO) {
             val bitmapCopy = bitmap.copy(bitmap.config!!, true)
+            if (EmulatorUtils.isEmulator()) {
+                appRepository.insertPhoto(categoryId, bitmapCopy)
+            }
             try {
                 processCapturedSegments(
                     originalBitmap = bitmapCopy,

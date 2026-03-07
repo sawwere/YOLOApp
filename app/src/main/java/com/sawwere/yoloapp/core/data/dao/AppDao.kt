@@ -54,4 +54,7 @@ interface AppDao {
     // Получаем количество фото в категории
     @Query("SELECT COUNT(*) FROM photos WHERE category_id = :categoryId")
     fun getPhotoCountInCategory(categoryId: Long): Int
+
+    @Query("UPDATE photos SET is_processed = 1 WHERE category_id = :categoryId")
+    fun markAllPhotosAsProcessed(categoryId: Long): Int
 }

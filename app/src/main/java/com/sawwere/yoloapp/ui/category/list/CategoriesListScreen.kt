@@ -50,11 +50,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.sawwere.yoloapp.R
 import com.sawwere.yoloapp.core.data.entity.Category
+import com.sawwere.yoloapp.ui.common.DeleteDialog
 import com.sawwere.yoloapp.ui.theme.Neutral100
 import com.sawwere.yoloapp.ui.theme.Neutral300
 import com.sawwere.yoloapp.ui.theme.Neutral400
@@ -84,6 +87,7 @@ fun CategoriesListScreen(
     viewModel: CategoriesListViewModel = hiltViewModel()
 ) {
     val categoriesWithCount by viewModel.categoriesWithCount.collectAsState(emptyList())
+    viewModel.loadCategoriesWithCount()
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -111,7 +115,7 @@ fun CategoriesListScreen(
                             )
                         }
                         Text(
-                            text = "Мои категории",
+                            text = stringResource(R.string.categories_list_top_bar_label),
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -136,7 +140,7 @@ fun CategoriesListScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Добавить категорию",
+                    contentDescription = stringResource(R.string.categories_list_add_category),
                     modifier = Modifier.size(24.dp)
                 )
             }
@@ -180,8 +184,11 @@ fun CategoriesListScreen(
     }
 
     if (showDeleteDialog && categoryToDelete != null) {
-        DeleteCategoryDialog(
-            category = categoryToDelete!!,
+        DeleteDialog(
+            titleText = stringResource(R.string.categories_list_delete_category_ask),
+            confirmationText = stringResource(
+                R.string.categories_list_delete_category_confirmation
+            ),
             onConfirm = {
                 categoryToDelete?.let { category ->
                     viewModel.deleteCategory(category.id)
@@ -227,7 +234,7 @@ private fun EmptyCategoriesContent() {
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Нет категорий",
+                text = stringResource(R.string.categories_list_not_categories_label),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = Neutral800
@@ -236,7 +243,7 @@ private fun EmptyCategoriesContent() {
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Создайте первую категорию,\nчтобы начать организацию фотографий",
+                text = stringResource(R.string.categories_list_create_first),
                 style = MaterialTheme.typography.bodyLarge,
                 color = Neutral600,
                 lineHeight = 24.sp
@@ -314,7 +321,10 @@ private fun CategoryCard(
                         )
 
                         Text(
-                            text = "$photoCount фото",
+                            text = stringResource(
+                                R.string.category_detail_images_count_label,
+                                photoCount
+                            ),
                             style = MaterialTheme.typography.labelLarge,
                             color = Neutral600
                         )
@@ -344,7 +354,9 @@ private fun CategoryCard(
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Удалить категорию",
+                    contentDescription = stringResource(
+                        R.string.categories_list_delete_category_label
+                    ),
                     tint = Secondary600,
                     modifier = Modifier.size(20.dp)
                 )
@@ -366,36 +378,19 @@ private fun AddCategoryDialog(
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(24.dp),
         title = {
-            Column {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Primary100),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = null,
-                        tint = Primary700,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Создать категорию",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
+            Text(
+                text = stringResource(R.string.categories_list_create_category_label),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         },
         text = {
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Введите название новой категории",
+                    text = stringResource(R.string.categories_list_enter_category_name_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = Neutral600
                 )
@@ -428,7 +423,9 @@ private fun AddCategoryDialog(
                     supportingText = {
                         if (isError) {
                             Text(
-                                text = "Название не может быть пустым",
+                                text = stringResource(
+                                    R.string.categories_list_empty_name_error_message
+                                ),
                                 color = Secondary500,
                                 style = MaterialTheme.typography.labelSmall
                             )
@@ -471,139 +468,7 @@ private fun AddCategoryDialog(
                 ),
                 shape = RoundedCornerShape(12.dp),
                 border = ButtonDefaults.outlinedButtonBorder().copy(
-                    width = 1.dp,
-                    //color = Neutral300
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                Text(
-                    text = "Отмена",
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        }
-    )
-}
-
-@Composable
-private fun DeleteCategoryDialog(
-    category: Category,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(24.dp),
-        title = {
-            Column {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(Secondary100),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = null,
-                        tint = Secondary700,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Удалить категорию?",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-        },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Вы уверены, что хотите удалить категорию",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Neutral600
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Neutral100,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Primary100),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Folder,
-                                contentDescription = null,
-                                tint = Primary600,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        Column {
-                            Text(
-                                text = category.name,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Neutral800
-                            )
-                            Text(
-                                text = "Все фотографии будут удалены",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Secondary600
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Secondary500,
-                    contentColor = NeutralWhite
-                ),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                Text(
-                    text = "Удалить",
-                    fontWeight = FontWeight.Medium
-                )
-            }
-        },
-        dismissButton = {
-            OutlinedButton(
-                onClick = onDismiss,
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Neutral700
-                ),
-                shape = RoundedCornerShape(12.dp),
-                border = ButtonDefaults.outlinedButtonBorder().copy(
-                    width = 1.dp,
-                    //color = Neutral300
+                    width = 1.dp
                 ),
                 modifier = Modifier
                     .fillMaxWidth()

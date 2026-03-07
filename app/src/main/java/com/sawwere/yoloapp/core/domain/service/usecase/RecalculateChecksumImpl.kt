@@ -56,6 +56,7 @@ class RecalculateChecksumImpl @Inject constructor(
                 ?: throw Exception("Категория не найдена")
             val updatedCategory = category.copy(checksum = avgVector)
             repository.updateCategory(updatedCategory)
+            repository.markAllPhotosAsProcessed(categoryId)
 
             Result.success(avgVector)
         } catch (e: Exception) {

@@ -12,7 +12,7 @@ import com.sawwere.yoloapp.core.data.entity.Photo
 
 @Database(
     entities = [Category::class, Photo::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

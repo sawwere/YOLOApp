@@ -286,15 +286,6 @@ class MediaStoreRepositoryImpl @Inject constructor(
     }
 
     /**
-     * Конвертирует Bitmap в ByteArray
-     */
-    private fun bitmapToByteArray(bitmap: Bitmap): ByteArray {
-        val outputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, IMAGE_QUALITY, outputStream)
-        return outputStream.toByteArray()
-    }
-
-    /**
      * Очищает все изображения приложения из MediaStore
      */
     suspend fun clearAllAppImages(): Int {

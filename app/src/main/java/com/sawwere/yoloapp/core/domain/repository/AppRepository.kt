@@ -32,10 +32,10 @@ interface AppRepository {
 
     suspend fun getPhotoCountInCategory(categoryId: Long): Int
 
-    suspend fun getCategoryTotalSize(categoryId: Long): Long
-
     suspend fun getLatestPhotoInCategory(categoryId: Long): Photo?
 
     suspend fun deletePhoto(photoId: Long): Boolean
+
+    suspend fun markAllPhotosAsProcessed(categoryId: Long)
 
 }

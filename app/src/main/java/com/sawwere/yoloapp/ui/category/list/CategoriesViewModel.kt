@@ -25,7 +25,7 @@ class CategoriesListViewModel @Inject constructor(
         loadCategoriesWithCount()
     }
 
-    private fun loadCategoriesWithCount() {
+    internal fun loadCategoriesWithCount() {
         viewModelScope.launch {
             repository.getAllCategories().collect { categories ->
                 val counts = categories.map { category ->

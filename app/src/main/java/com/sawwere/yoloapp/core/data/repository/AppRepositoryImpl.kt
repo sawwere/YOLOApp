@@ -37,6 +37,33 @@ class AppRepositoryImpl @Inject constructor(
     override fun getCategoryWithPhotos(categoryId: Long): Flow<CategoryWithPhotos?> =
         appDao.getCategoryWithPhotos(categoryId)
 
+    override suspend fun deleteCategory(categoryId: Long): Boolean {
+        return withContext(Dispatchers.IO) {
+            try {
+                val category = appDao.getCategoryById(categoryId)
+                if (category != null) {
+                    val photos = appDao.getPhotosByCategory(categoryId).first()
+
+                    photos.forEach { photo ->
+                        try {
+                            val uri = Uri.parse(photo.imageUri)
+                            mediaStoreRepository.deleteImageFromPublicStorage(uri)
+                        } catch (e: Exception) {
+                            // Логируем ошибку, но продолжаем удаление
+                        }
+                    }
+
+                    appDao.deleteCategory(category)
+                    true
+                } else {
+                    false
+                }
+            } catch (e: Exception) {
+                false
+            }
+        }
+    }
+
     override suspend fun getCategoryById(categoryId: Long): Category? =
         withContext(Dispatchers.IO) {
             appDao.getCategoryById(categoryId)
@@ -84,13 +111,6 @@ class AppRepositoryImpl @Inject constructor(
             appDao.getPhotoCountInCategory(categoryId)
         }
 
-    override suspend fun getCategoryTotalSize(categoryId: Long): Long {
-        return withContext(Dispatchers.IO) {
-            val photos = getPhotosByCategory(categoryId).first()
-            photos.sumOf { it.fileSize }
-        }
-    }
-
     override suspend fun getLatestPhotoInCategory(categoryId: Long): Photo? {
         return withContext(Dispatchers.IO) {
             val photos = getPhotosByCategory(categoryId).first()
@@ -117,30 +137,9 @@ class AppRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun deleteCategory(categoryId: Long): Boolean {
+    override suspend fun markAllPhotosAsProcessed(categoryId: Long) {
         return withContext(Dispatchers.IO) {
-            try {
-                val category = appDao.getCategoryById(categoryId)
-                if (category != null) {
-                    val photos = appDao.getPhotosByCategory(categoryId).first()
-
-                    photos.forEach { photo ->
-                        try {
-                            val uri = Uri.parse(photo.imageUri)
-                            mediaStoreRepository.deleteImageFromPublicStorage(uri)
-                        } catch (e: Exception) {
-                            // Логируем ошибку, но продолжаем удаление
-                        }
-                    }
-
-                    appDao.deleteCategory(category)
-                    true
-                } else {
-                    false
-                }
-            } catch (e: Exception) {
-                false
-            }
+            appDao.markAllPhotosAsProcessed(categoryId)
         }
     }
 }

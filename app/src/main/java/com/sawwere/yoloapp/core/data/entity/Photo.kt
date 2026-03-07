@@ -27,11 +27,15 @@ data class Photo(
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
 
+    @ColumnInfo(name = "description")
     val description: String = "",
 
     @ColumnInfo(name = "file_name")
     val fileName: String = "",
 
     @ColumnInfo(name = "file_size")
-    val fileSize: Long = 0
+    val fileSize: Long = 0,
+
+    @ColumnInfo(name = "is_processed", defaultValue = "0")
+    val isProcessed: Boolean = false
 )

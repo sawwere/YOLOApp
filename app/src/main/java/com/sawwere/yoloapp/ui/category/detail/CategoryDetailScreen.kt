@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.AlertDialog
@@ -68,10 +69,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.sawwere.yoloapp.R
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.Photo
+import com.sawwere.yoloapp.ui.common.DeleteDialog
 import com.sawwere.yoloapp.ui.theme.NeutralWhite
 import com.sawwere.yoloapp.ui.theme.Primary500
 import com.sawwere.yoloapp.ui.theme.Secondary500
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -253,7 +256,9 @@ fun CategoryDetailScreen(
         }
     }
     if (photoToDelete != null) {
-        DeletePhotoDialog(
+        DeleteDialog(
+            titleText = stringResource(R.string.category_datail_delete_photo_title),
+            confirmationText = stringResource(R.string.category_detail_delete_photo_confirmation),
             onConfirm = {
                 viewModel.deletePhoto(photoToDelete!!.id)
                 photoToDelete = null
@@ -293,9 +298,13 @@ private fun CategoryInfoCard(
                     )
 
                     Text(
-                        text = "$photoCount фото",
+                        text = stringResource(
+                            R.string.category_detail_images_count_label,
+                            photoCount
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
@@ -418,7 +427,7 @@ private fun PhotoGridItem(
     val context = LocalContext.current
 
     LaunchedEffect(photo.imageUri) {
-        kotlinx.coroutines.withContext(Dispatchers.IO) {
+        withContext(Dispatchers.IO) {
             try {
                 val uri = Uri.parse(photo.imageUri)
                 val inputStream = context.contentResolver.openInputStream(uri)
@@ -454,6 +463,15 @@ private fun PhotoGridItem(
                 }
             }
 
+            if (photo.isProcessed) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.5f))
+                )
+            }
+
+            // Кнопка удаления
             IconButton(
                 onClick = onDeleteClick,
                 modifier = Modifier
@@ -468,33 +486,26 @@ private fun PhotoGridItem(
                     modifier = Modifier.size(16.dp)
                 )
             }
+
+            if (photo.isProcessed) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .size(24.dp)
+                        .background(Color.Green.copy(alpha = 0.8f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = stringResource(
+                            R.string.category_detail_processed_image_label
+                        ),
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
     }
-}
-
-@Composable
-private fun DeletePhotoDialog(
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.category_datail_delete_photo_title)) },
-        text = { Text(stringResource(R.string.category_detail_delete_photo_confirmation)) },
-        confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Text(stringResource(R.string.ui_common_delete))
-            }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text(stringResource(R.string.ui_common_cancel))
-            }
-        }
-    )
 }
