@@ -1,6 +1,5 @@
 package com.sawwere.yoloapp.ui.camera
 
-import androidx.lifecycle.SavedStateHandle
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.camera.core.Camera
@@ -8,14 +7,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sawwere.yoloapp.core.config.EmulatorUtils
+import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.domain.image.DrawImages
 import com.sawwere.yoloapp.core.domain.image.ImageProcessor
-import com.sawwere.yoloapp.core.domain.repository.AppRepository
 import com.sawwere.yoloapp.core.domain.image.ImageUtils
+import com.sawwere.yoloapp.core.domain.repository.AppRepository
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenMode
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenNavigation
 import com.sawwere.yoloapp.ui.camera.usecase.ValidateObject
@@ -54,6 +55,16 @@ class CameraScreenViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(CameraScreenUIState())
     val uiState: StateFlow<CameraScreenUIState> = _uiState.asStateFlow()
+
+    private lateinit var category: Category
+    var categoryId: Long = savedStateHandle[CameraScreenNavigation.CATEGORY_ID_ARG]
+        ?: 0L
+        set(value) {
+            field = value
+            viewModelScope.launch {
+                category = appRepository.getCategoryById(field)!!
+            }
+        }
 
     var drawMode: String = savedStateHandle[CameraScreenNavigation.MODE_ARG]
         ?: CameraScreenMode.ADD.value.also {
@@ -159,11 +170,11 @@ class CameraScreenViewModel @Inject constructor(
                     val croppedSegment = ImageUtils.extractRectSegment(originalBitmap, detection.bbox)
 
                     if (croppedSegment != null) {
-                        result.add(croppedSegment.copy(croppedSegment.config!!, true))
+                        //result.add(croppedSegment.copy(croppedSegment.config!!, true))
                         val processedBitmap = processSingleSegment(croppedSegment)
                         Log.d(
                             TAG,
-                            "Processed bitmap for object $index: ${processedBitmap.width}x${processedBitmap.height}"
+                            "Processed bitmap for object $index: ${processedBitmap.width}x${processedBitmap.height} ${processedBitmap.byteCount}"
                         )
                         result.add(processedBitmap)
                         //addProcessedSegment(processedBitmap, categoryId)
@@ -320,13 +331,21 @@ class CameraScreenViewModel @Inject constructor(
             detectionBoxes = results
         )
 
-        for ((index, detection) in processedDetections.withIndex()) {
-            val res = validateObject(detection)
-            results[index / 2].classId = when(res) {
-                ValidateObject.ValidationResult.SUCCESS -> 0
-                ValidateObject.ValidationResult.FORGERY -> 1
+        if (drawMode == CameraScreenMode.CHECK.value) {
+            for ((index, detection) in processedDetections.withIndex()) {
+                val res = validateObject(detection, category)
+                results[index].classId = when(res) {
+                    is ValidateObject.ValidationResult.Genuine -> 0
+                    is ValidateObject.ValidationResult.Forgery -> 1
+                    is ValidateObject.ValidationResult.None -> 2
+                }
+                Log.d(
+                    TAG,
+                    "index=$index, confidence=${res.confidence}, distance=${res.distance}"
+                )
             }
         }
+
 
         // Создаем сегментированное изображение для отображения в реальном времени
         segmentedBitmap = if (results.isEmpty()) {

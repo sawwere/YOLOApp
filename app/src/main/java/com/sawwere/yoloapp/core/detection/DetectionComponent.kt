@@ -124,63 +124,21 @@ class DetectionComponent(
 //        }
 
         var preProcessTime = SystemClock.uptimeMillis()
-
         val imageBuffer = preProcess(frame)
-
-//        val finalDetections = applyNMS(rawDetections)
-//
-//        finalDetections.forEach { detection ->
-//            val rect = scaleBoundingBox(detection, frame.width, frame.height)
-//        }
-
-//        val coordinatesBuffer = TensorBuffer.createFixedSize(
-//            intArrayOf(1 , numChannel, numElements),
-//            OUTPUT_IMAGE_TYPE
-//        )
-//
-//        val maskProtoBuffer = TensorBuffer.createFixedSize(
-//            intArrayOf(1, xPoints, yPoints, masksNum),
-//            OUTPUT_IMAGE_TYPE
-//        )
-////
-//        val outputBuffer = mapOf<Int, Any>(
-//            0 to coordinatesBuffer.buffer.rewind(),
-//            1 to maskProtoBuffer.buffer.rewind()
-//        )
-//
         preProcessTime = SystemClock.uptimeMillis() - preProcessTime
-//
-        var interfaceTime = SystemClock.uptimeMillis()
 
+        var interfaceTime = SystemClock.uptimeMillis()
         val outputBuffer = HashMap<Int, Any>()
         outputBuffer[0] = Array(1) { Array(300) { FloatArray(6) } }
-
         interpreter.runForMultipleInputsOutputs(imageBuffer, outputBuffer)
-//
         interfaceTime = SystemClock.uptimeMillis() - interfaceTime
-//
-        var postProcessTime = SystemClock.uptimeMillis()
-//
-//        val bestBoxes = bestBox(coordinatesBuffer.floatArray) ?: run {
-//            instanceSegmentationListener.onEmpty()
-//            return
-//        }
-//
-//        val maskProto = reshapeMaskOutput(maskProtoBuffer.floatArray)
-//
-//        val segmentationResults = bestBoxes.map {
-//            SegmentationResult(
-//                box = it,
-//                mask = getFinalMask(frame.width, frame.height, it, maskProto)
-//            )
-//        }
 
+        var postProcessTime = SystemClock.uptimeMillis()
         val segmentationResults = processOutput(
             imageWidth = frame.width,
             imageHeight = frame.height,
             output = outputBuffer[0] as Array<Array<FloatArray>>
         )
-
         postProcessTime = SystemClock.uptimeMillis() - postProcessTime
 
         listeners.forEach {

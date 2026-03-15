@@ -22,7 +22,7 @@ interface AppRepository {
     suspend fun deleteCategory(categoryId: Long): Boolean
 
     // Photo operations
-    fun getPhotosByCategory(categoryId: Long): Flow<List<Photo>>
+    suspend fun getPhotosByCategory(categoryId: Long): Flow<List<Photo>>
 
     suspend fun insertPhoto(
         categoryId: Long,

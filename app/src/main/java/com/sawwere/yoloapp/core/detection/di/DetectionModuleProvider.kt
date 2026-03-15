@@ -2,6 +2,7 @@ package com.sawwere.yoloapp.core.detection.di
 
 import android.content.Context
 import com.sawwere.yoloapp.core.detection.DetectionComponent
+import com.sawwere.yoloapp.core.detection.EmbeddingExtractorComponent
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,5 +21,14 @@ class DetectionModuleProvider {
         context = context,
         modelPath = "yolov8s_float16.tflite",
         labelPath = null,
+    )
+
+    @Provides
+    @Singleton
+    fun provideEmbeddingExtractorComponent(
+        @ApplicationContext context: Context,
+    ): EmbeddingExtractorComponent = EmbeddingExtractorComponent(
+        context = context,
+        modelPath = "siamese_model.tflite"
     )
 }

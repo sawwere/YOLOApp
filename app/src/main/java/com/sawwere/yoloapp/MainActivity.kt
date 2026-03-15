@@ -116,6 +116,7 @@ class MainActivity : ComponentActivity() {
                             ?.getString(CameraScreenNavigation.MODE_ARG)
                             ?: CameraScreenMode.ADD.value
                         viewModel.drawMode = mode
+                        viewModel.categoryId = categoryId
                         CameraPermissionScreen(
                             onBackClick = { navController.popBackStack() },
                             onCaptureClick = {

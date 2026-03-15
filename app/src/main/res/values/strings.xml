@@ -41,4 +41,5 @@
     <string name="categories_list_delete_category_ask">Delete a category?</string>
     <string name="categories_list_delete_category_confirmation">Are you sure you want to delete the category? All photos will be lost.</string>
     <string name="category_detail_processed_image_label">Processed</string>
+    <string name="ui_common_loading_error">Loading error</string>
 </resources>

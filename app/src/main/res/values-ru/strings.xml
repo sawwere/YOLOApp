@@ -41,4 +41,5 @@
     <string name="categories_list_delete_category_ask">Удалить категорию?</string>
     <string name="categories_list_delete_category_confirmation">Вы уверены, что хотите удалить категорию? Все фотографии будут удалены.</string>
     <string name="category_detail_processed_image_label">Обработано</string>
+    <string name="ui_common_loading_error">Ошибка загрузки</string>
 </resources>

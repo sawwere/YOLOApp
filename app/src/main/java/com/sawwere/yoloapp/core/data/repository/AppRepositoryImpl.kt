@@ -70,7 +70,7 @@ class AppRepositoryImpl @Inject constructor(
         }
 
     // Photo operations
-    override fun getPhotosByCategory(categoryId: Long): Flow<List<Photo>> =
+    override suspend fun getPhotosByCategory(categoryId: Long): Flow<List<Photo>> =
         appDao.getPhotosByCategory(categoryId)
 
     override suspend fun insertPhoto(

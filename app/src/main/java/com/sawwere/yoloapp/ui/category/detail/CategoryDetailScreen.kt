@@ -27,11 +27,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -41,7 +41,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -58,6 +57,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -67,15 +67,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sawwere.yoloapp.R
+import com.sawwere.yoloapp.core.config.EmulatorUtils.isEmulator
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.Photo
 import com.sawwere.yoloapp.ui.common.DeleteDialog
+import com.sawwere.yoloapp.ui.theme.Neutral300
+import com.sawwere.yoloapp.ui.theme.Neutral600
 import com.sawwere.yoloapp.ui.theme.NeutralWhite
 import com.sawwere.yoloapp.ui.theme.Primary500
 import com.sawwere.yoloapp.ui.theme.Secondary500
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
+import java.time.Duration
 import java.util.Date
 import java.util.Locale
 
@@ -424,19 +429,36 @@ private fun PhotoGridItem(
     onDeleteClick: () -> Unit
 ) {
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var hasError by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     LaunchedEffect(photo.imageUri) {
-        withContext(Dispatchers.IO) {
-            try {
-                val uri = Uri.parse(photo.imageUri)
-                val inputStream = context.contentResolver.openInputStream(uri)
-                inputStream?.use {
-                    bitmap = BitmapFactory.decodeStream(it)
+        isLoading = true
+        hasError = false
+        try {
+            val loadedBitmap = withTimeoutOrNull(Duration.ofSeconds(5)) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val uri = Uri.parse(photo.imageUri)
+                        val inputStream = context.contentResolver.openInputStream(uri)
+                        inputStream?.use {
+                            BitmapFactory.decodeStream(it)
+                        }
+                    } catch (e: Exception) {
+                        null
+                    }
                 }
-            } catch (e: Exception) {
-                e.printStackTrace()
             }
+            if (loadedBitmap != null) {
+                bitmap = loadedBitmap
+            } else {
+                hasError = true
+            }
+        } catch (e: Exception) {
+            hasError = true
+        } finally {
+            isLoading = false
         }
     }
 
@@ -447,31 +469,66 @@ private fun PhotoGridItem(
         shape = RoundedCornerShape(8.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap!!.asImageBitmap(),
-                    contentDescription = photo.description,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                }
+                hasError || bitmap == null -> {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Neutral300),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BrokenImage,
+                            contentDescription = stringResource(R.string.ui_common_loading_error),
+                            tint = Neutral600,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                }
+                else -> {
+                    Image(
+                        bitmap = bitmap!!.asImageBitmap(),
+                        contentDescription = photo.description,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
 
-            if (photo.isProcessed) {
+            if (photo.isProcessed && bitmap != null && !isLoading && !hasError) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.5f))
                 )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color.Green),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = stringResource(
+                            R.string.category_detail_processed_image_label
+                        ),
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
 
-            // Кнопка удаления
             IconButton(
                 onClick = onDeleteClick,
                 modifier = Modifier
@@ -485,26 +542,6 @@ private fun PhotoGridItem(
                     tint = Color.White,
                     modifier = Modifier.size(16.dp)
                 )
-            }
-
-            if (photo.isProcessed) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .size(24.dp)
-                        .background(Color.Green.copy(alpha = 0.8f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = stringResource(
-                            R.string.category_detail_processed_image_label
-                        ),
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
             }
         }
     }
