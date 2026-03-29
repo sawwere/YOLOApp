@@ -1,4 +1,4 @@
-package com.sawwere.yoloapp.ui.camera
+package com.sawwere.yoloapp.ui.camera.component
 
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState

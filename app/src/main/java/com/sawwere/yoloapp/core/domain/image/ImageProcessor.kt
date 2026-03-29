@@ -1,68 +1,25 @@
 package com.sawwere.yoloapp.core.domain.image
 
 import android.graphics.Bitmap
-import android.graphics.Color
 import org.opencv.android.Utils
+import org.opencv.core.Core
 import org.opencv.core.CvType
 import org.opencv.core.Mat
-import org.opencv.core.MatOfPoint
 import org.opencv.core.Rect
 import org.opencv.core.Scalar
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import javax.inject.Singleton
 import kotlin.math.max
-import kotlin.math.min
 
 @Singleton
 class ImageProcessor {
     companion object {
         private const val TARGET_SIZE = 224
         private const val ADAPTIVE_THRESH_BLOCK_SIZE = 31
-        private const val ADAPTIVE_THRESH_C = 10
+        private const val ADAPTIVE_THRESH_C = 15.0
         private const val MEDIAN_BLUR_SIZE = 3
         private const val MORPH_KERNEL_SIZE = 3
-    }
-
-    fun processDocumentImage(bitmap: Bitmap): Bitmap {
-        return try {
-            val srcMat = Mat()
-            Utils.bitmapToMat(bitmap, srcMat)
-
-            val grayMat = Mat()
-            Imgproc.cvtColor(srcMat, grayMat, Imgproc.COLOR_RGB2GRAY)
-
-            val binaryMat = Mat()
-            Imgproc.adaptiveThreshold(
-                grayMat,
-                binaryMat,
-                255.0,
-                Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
-                Imgproc.THRESH_BINARY,
-                ADAPTIVE_THRESH_BLOCK_SIZE,
-                ADAPTIVE_THRESH_C.toDouble()
-            )
-
-            val denoisedMat = removeNoise(binaryMat)
-            val documentMat = findDocument(denoisedMat, grayMat)
-            val normalizedMat = normalizeTo224(documentMat)
-
-            val resultBitmap = Bitmap.createBitmap(TARGET_SIZE, TARGET_SIZE, Bitmap.Config.ARGB_8888)
-            Utils.matToBitmap(normalizedMat, resultBitmap)
-
-            srcMat.release()
-            grayMat.release()
-            binaryMat.release()
-            denoisedMat.release()
-            documentMat.release()
-            normalizedMat.release()
-
-            resultBitmap
-        } catch (e: Exception) {
-            Bitmap.createBitmap(TARGET_SIZE, TARGET_SIZE, Bitmap.Config.ARGB_8888).apply {
-                eraseColor(Color.BLACK)
-            }
-        }
     }
 
     private fun removeNoise(binaryMat: Mat): Mat {
@@ -87,174 +44,155 @@ class ImageProcessor {
         return closed
     }
 
-    private fun findDocument(binaryMat: Mat, grayMat: Mat): Mat {
-        try {
-            val contours = mutableListOf<MatOfPoint>()
-            val hierarchy = Mat()
-            Imgproc.findContours(
-                binaryMat,
-                contours,
-                hierarchy,
-                Imgproc.RETR_EXTERNAL,
-                Imgproc.CHAIN_APPROX_SIMPLE
-            )
+    private fun findDocument(binaryMat: Mat): Mat {
+        // 1. Инверсия: текст становится белым на чёрном
+        val inverted = Mat()
+        Core.bitwise_not(binaryMat, inverted)
 
-            if (contours.isEmpty()) {
-                return grayMat.clone()
+        val width = inverted.cols()
+        val height = inverted.rows()
+        val minBlackToWhiteRatio = 0.8
+
+        // 2. Поиск связных компонент
+        val labels = Mat()
+        val stats = Mat()
+        val centroids = Mat()
+        val numLabels = Imgproc.connectedComponentsWithStats(inverted, labels, stats, centroids, 8)
+
+        val removeMask = Mat.zeros(inverted.size(), CvType.CV_8UC1)
+        for (i in 1 until numLabels) {
+            val x = stats.get(i, Imgproc.CC_STAT_LEFT)[0].toInt()
+            val y = stats.get(i, Imgproc.CC_STAT_TOP)[0].toInt()
+            val w = stats.get(i, Imgproc.CC_STAT_WIDTH)[0].toInt()
+            val h = stats.get(i, Imgproc.CC_STAT_HEIGHT)[0].toInt()
+            val area = stats.get(i, Imgproc.CC_STAT_AREA)[0].toInt()
+
+            val touchesBorder = x == 0 || y == 0 || x + w == width || y + h == height
+            if (!touchesBorder) continue
+
+            val bboxTotal = w * h
+            val blackPixels = bboxTotal - area
+
+            if (blackPixels >= minBlackToWhiteRatio * area) {
+                val componentMask = Mat.zeros(inverted.size(), CvType.CV_8UC1)
+                Core.compare(labels, Scalar(i.toDouble()), componentMask, Core.CMP_EQ)
+                Core.bitwise_or(removeMask, componentMask, removeMask)
+                componentMask.release()
             }
-
-            var maxArea = 0.0
-            var maxContour: MatOfPoint? = null
-
-            for (contour in contours) {
-                val area = Imgproc.contourArea(contour)
-                if (area > maxArea) {
-                    maxArea = area
-                    maxContour = contour
-                }
-            }
-
-            if (maxContour == null) {
-                return grayMat.clone()
-            }
-
-            val rect = Imgproc.boundingRect(maxContour)
-
-            val padding = 10
-            val x = max(rect.x - padding, 0)
-            val y = max(rect.y - padding, 0)
-            val right = min(rect.x + rect.width + padding, grayMat.cols())
-            val bottom = min(rect.y + rect.height + padding, grayMat.rows())
-
-            val width = right - x
-            val height = bottom - y
-
-            if (width <= 0 || height <= 0) {
-                return grayMat.clone()
-            }
-
-            val paddedRect = Rect(x, y, width, height)
-
-            val document = Mat(grayMat, paddedRect)
-
-            hierarchy.release()
-            contours.forEach { it.release() }
-
-            return document
-        } catch (e: Exception) {
-            return grayMat.clone()
         }
+
+        // 4. Удаление помеченных компонент
+        val withoutComponents = Mat()
+        Core.bitwise_not(removeMask, removeMask)
+        Core.bitwise_and(inverted, removeMask, inverted)
+
+        // 5. Обратная инверсия
+        Core.bitwise_not(inverted, inverted)
+
+//        // 6. Поиск bounding box оставшегося текста
+//        // Для этого временно инвертируем, чтобы текст был белым на чёрном
+//        val textWhite = Mat()
+//        Core.bitwise_not(inverted, textWhite)
+//        val points = MatOfPoint()
+//        Core.findNonZero(textWhite, points)
+//        if (points.total() == 0L) {
+//            // Если текста не осталось – возвращаем исходное изображение
+//            return grayMat.clone()
+//        }
+//        val rect = Core.boundingRect(points)
+
+        labels.release()
+        stats.release()
+        centroids.release()
+        removeMask.release()
+//        textWhite.release()
+//        points.release()
+
+        return inverted
     }
 
-    private fun normalizeTo224(inputMat: Mat): Mat {
+    private fun normalizeToSquare(inputMat: Mat, targetSize: Int): Mat {
         if (inputMat.empty() || inputMat.rows() <= 0 || inputMat.cols() <= 0) {
-            return Mat(TARGET_SIZE, TARGET_SIZE, CvType.CV_8UC1, Scalar(255.0))
+            return Mat(targetSize, targetSize, CvType.CV_8UC1, Scalar(255.0))
         }
 
-        try {
-            val height = inputMat.rows()
-            val width = inputMat.cols()
+        val height = inputMat.rows()
+        val width = inputMat.cols()
 
-            val maxSide = max(height, width).toDouble()
+        val maxSide = max(height, width).toDouble()
 
-            val scale = TARGET_SIZE.toDouble() / maxSide
+        val scale = targetSize.toDouble() / maxSide
 
-            val newHeight = (height * scale).toInt()
-            val newWidth = (width * scale).toInt()
+        val newHeight = (height * scale).toInt()
+        val newWidth = (width * scale).toInt()
 
-            val resized = Mat()
-            Imgproc.resize(inputMat, resized, Size(newWidth.toDouble(), newHeight.toDouble()))
-            val squareMat = Mat(TARGET_SIZE, TARGET_SIZE, CvType.CV_8UC1, Scalar(255.0))
+        val resized = Mat()
+        Imgproc.resize(inputMat, resized, Size(newWidth.toDouble(), newHeight.toDouble()))
+        val squareMat = Mat(targetSize, targetSize, CvType.CV_8UC1, Scalar(255.0))
 
-            val xOffset = (TARGET_SIZE - newWidth) / 2
-            val yOffset = (TARGET_SIZE - newHeight) / 2
+        val xOffset = (targetSize - newWidth) / 2
+        val yOffset = (targetSize - newHeight) / 2
 
-            if (xOffset >= 0 && yOffset >= 0 &&
-                xOffset + newWidth <= TARGET_SIZE &&
-                yOffset + newHeight <= TARGET_SIZE
-            ) {
+        val roi = Rect(xOffset, yOffset, newWidth, newHeight)
+        val destinationROI = squareMat.submat(roi)
+        resized.copyTo(destinationROI)
+        destinationROI.release()
 
-                val roi = Rect(xOffset, yOffset, newWidth, newHeight)
-                val destinationROI = squareMat.submat(roi)
-                resized.copyTo(destinationROI)
-                destinationROI.release()
-            } else {
-                val copyWidth = min(newWidth, TARGET_SIZE)
-                val copyHeight = min(newHeight, TARGET_SIZE)
-                val roi = Rect(0, 0, copyWidth, copyHeight)
-                val destinationROI = squareMat.submat(roi)
-                val sourceROI = resized.submat(Rect(0, 0, copyWidth, copyHeight))
-                sourceROI.copyTo(destinationROI)
-                sourceROI.release()
-                destinationROI.release()
-            }
-
-            resized.release()
-            return squareMat
-        } catch (e: Exception) {
-            return Mat(TARGET_SIZE, TARGET_SIZE, CvType.CV_8UC1, Scalar(255.0))
-        }
+        resized.release()
+        return squareMat
     }
 
     fun processDocumentImageEnhanced(bitmap: Bitmap): Bitmap {
-        return try {
-            val srcMat = Mat()
-            Utils.bitmapToMat(bitmap, srcMat)
+        val srcMat = Mat()
+        Utils.bitmapToMat(bitmap, srcMat)
 
-            val grayMat = Mat()
-            Imgproc.cvtColor(srcMat, grayMat, Imgproc.COLOR_RGB2GRAY)
+        val grayMat = Mat()
+        Imgproc.cvtColor(srcMat, grayMat, Imgproc.COLOR_RGB2GRAY)
 
-            // 2. Улучшение контраста (CLAHE - Contrast Limited Adaptive Histogram Equalization)
-            val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
-            val enhancedMat = Mat()
-            clahe.apply(grayMat, enhancedMat)
+        // 2. Улучшение контраста (CLAHE - Contrast Limited Adaptive Histogram Equalization)
+        val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
+        val enhancedMat = Mat()
+        clahe.apply(grayMat, enhancedMat)
 
-            // 3. Гауссово размытие для уменьшения шума
-            val blurredMat = Mat()
-            Imgproc.GaussianBlur(enhancedMat, blurredMat, Size(5.0, 5.0), 0.0)
+        // 3. Гауссово размытие для уменьшения шума
+        val blurredMat = Mat()
+        Imgproc.GaussianBlur(enhancedMat, blurredMat, Size(5.0, 5.0), 0.0)
 
-            // 4. Адаптивная бинаризация с Otsu
-            val binaryMat = Mat()
-            Imgproc.adaptiveThreshold(
-                blurredMat,
-                binaryMat,
-                255.0,
-                Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
-                Imgproc.THRESH_BINARY,
-                11,
-                2.0
-            )
+        // 4. Адаптивная бинаризация с Otsu
+        val binaryMat = Mat()
+        Imgproc.adaptiveThreshold(
+            grayMat,
+            binaryMat,
+            255.0,
+            Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+            Imgproc.THRESH_BINARY,
+            ADAPTIVE_THRESH_BLOCK_SIZE,
+            ADAPTIVE_THRESH_C
+        )
 
-            val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(3.0, 3.0))
-            val morphedMat = Mat()
-            Imgproc.morphologyEx(binaryMat, morphedMat, Imgproc.MORPH_CLOSE, kernel)
-            Imgproc.morphologyEx(morphedMat, morphedMat, Imgproc.MORPH_OPEN, kernel)
+        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(3.0, 3.0))
+        val morphedMat = Mat()
+        Imgproc.morphologyEx(binaryMat, morphedMat, Imgproc.MORPH_CLOSE, kernel)
+        Imgproc.morphologyEx(morphedMat, morphedMat, Imgproc.MORPH_OPEN, kernel)
 
-            val documentMat = findDocument(morphedMat, blurredMat)
+        val documentMat = findDocument(grayMat)
 
-            val documentBinary = Mat()
-            Imgproc.threshold(documentMat, documentBinary, 0.0, 255.0, Imgproc.THRESH_BINARY + Imgproc.THRESH_OTSU)
+        val normalizedMat = normalizeToSquare(documentMat, TARGET_SIZE)
 
-            val normalizedMat = normalizeTo224(documentBinary)
+        val resultBitmap = Bitmap.createBitmap(TARGET_SIZE, TARGET_SIZE, Bitmap.Config.ARGB_8888)
+        Utils.matToBitmap(normalizedMat, resultBitmap)
 
-            val resultBitmap = Bitmap.createBitmap(TARGET_SIZE, TARGET_SIZE, Bitmap.Config.ARGB_8888)
-            Utils.matToBitmap(normalizedMat, resultBitmap)
+        srcMat.release()
+        grayMat.release()
+        enhancedMat.release()
+        blurredMat.release()
+        binaryMat.release()
+        kernel.release()
+        morphedMat.release()
+        documentMat.release()
+        normalizedMat.release()
+        //clahe.release()
 
-            srcMat.release()
-            grayMat.release()
-            enhancedMat.release()
-            blurredMat.release()
-            binaryMat.release()
-            kernel.release()
-            morphedMat.release()
-            documentMat.release()
-            documentBinary.release()
-            normalizedMat.release()
-            //clahe.release()
-
-            resultBitmap
-        } catch (e: Exception) {
-            processDocumentImage(bitmap)
-        }
+        return resultBitmap
     }
 }

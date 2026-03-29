@@ -1,7 +1,5 @@
 package com.sawwere.yoloapp.ui.camera
 
-import android.content.Context
-import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -22,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +32,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -49,21 +50,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.sawwere.yoloapp.MainActivity
 import com.sawwere.yoloapp.R
 import com.sawwere.yoloapp.core.system.VibrationComponent
+import com.sawwere.yoloapp.ui.camera.component.ShutterButton
+import com.sawwere.yoloapp.ui.camera.component.SpeedInfoPanel
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenMode
+import kotlinx.coroutines.flow.map
 
 
 @Composable
@@ -97,14 +99,39 @@ fun CameraScreen(
             }
     }
 
-    val detectedObjectsCount = viewModel.detectedObjectsCount.collectAsState()
+    val detectedBoxes by viewModel.detectedBoxes.collectAsState()
 
     val currentSegment by remember(processedSegments.value, currentSegmentIndex.intValue) {
         mutableStateOf(
-            if (processedSegments.value.isNotEmpty() && currentSegmentIndex.intValue < processedSegments.value.size) {
+            if (processedSegments.value.isNotEmpty()
+                && currentSegmentIndex.intValue < processedSegments.value.size
+                ) {
                 processedSegments.value[currentSegmentIndex.intValue]
             } else {
                 null
+            }
+        )
+    }
+
+    val errorMessage by viewModel.uiState.map { it.errorMessage }.collectAsState(null)
+
+    if (errorMessage != null) {
+        AlertDialog(
+            onDismissRequest = {
+                viewModel.clearError()
+                onBackClick()
+            },
+            title = { Text(stringResource(R.string.ui_common_error)) },
+            text = { Text(errorMessage!!) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearError()
+                        onBackClick()
+                    }
+                ) {
+                    Text(stringResource(R.string.ui_common_return))
+                }
             }
         )
     }
@@ -150,16 +177,18 @@ fun CameraScreen(
                 )
             }
 
-            SpeedInfoPanel(
-                context = context,
-                preProcessTime = uiState.preProcessTime,
-                inferenceTime = uiState.inferenceTime,
-                postProcessTime = uiState.postProcessTime,
-                detectedObjects = detectedObjectsCount.value,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp)
-            )
+            if (uiState.debugMode) {
+                SpeedInfoPanel(
+                    preProcessTime = uiState.preProcessTime,
+                    inferenceTime = uiState.inferenceTime,
+                    postProcessTime = uiState.postProcessTime,
+                    detectedObjects = detectedBoxes.size,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .statusBarsPadding()
+                        .padding(8.dp)
+                )
+            }
 
             LaunchedEffect(previewView) {
                 if (previewView != null) {
@@ -174,6 +203,12 @@ fun CameraScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
             ) {
+                Text(
+                    text = "Zoom: ${uiState.zoomProgress.format(1)}x",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
                 Slider(
                     value = uiState.zoomProgress,
                     onValueChange = { newProgress ->
@@ -189,16 +224,7 @@ fun CameraScreen(
                         inactiveTrackColor = Color(0xFF6200EE).copy(alpha = 0.24f)
                     )
                 )
-
-                Text(
-                    text = "Zoom: ${uiState.zoomProgress.format(1)}x",
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
             }
-
-            Spacer(modifier = Modifier.height(8.dp))
         }
 
         if (uiState.debugMode) {
@@ -254,7 +280,6 @@ fun CameraScreen(
                         IconButton(
                             onClick = {
                                 viewModel.clearAllSegments()
-                                Toast.makeText(context, "Сегменты очищены", Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.size(24.dp)
                         ) {
@@ -355,7 +380,6 @@ fun CameraScreen(
                             }
                         }
                     } else {
-                        // Плейсхолдер, когда нет сегментов
                         Column(
                             modifier = Modifier.align(Alignment.Center),
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -368,8 +392,11 @@ fun CameraScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = if (detectedObjectsCount.value > 0)
-                                    "Объекты обнаружены (${detectedObjectsCount.value})"
+                                text = if (detectedBoxes.isNotEmpty())
+                                    stringResource(
+                                        R.string.camera_screen_objects_found_label,
+                                        detectedBoxes.size
+                                    )
                                 else stringResource(R.string.camera_no_objects_found_label),
                                 color = Color.Yellow,
                                 fontSize = 12.sp
@@ -455,93 +482,5 @@ fun CameraScreen(
 }
 
 
-@Composable
-fun SpeedInfoPanel(
-    context: Context,
-    preProcessTime: Long,
-    inferenceTime: Long,
-    postProcessTime: Long,
-    detectedObjects: Int,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
-            .shadow(4.dp, RoundedCornerShape(8.dp))
-            .padding(12.dp)
-    ) {
-        Column {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .background(
-                            if (detectedObjects > 0) Color.Green else Color.Gray,
-                            RoundedCornerShape(4.dp)
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
-                    Text(
-                        text = "$detectedObjects obj",
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            SpeedInfoRow(
-                label = context.getString(R.string.camera_preprocess_label),
-                value = "${preProcessTime}ms",
-                color = Color(0xFF4CAF50)
-            )
-            SpeedInfoRow(
-                label = context.getString(R.string.camera_inference_label),
-                value = "${inferenceTime}ms",
-                color = Color(0xFF2196F3)
-            )
-            SpeedInfoRow(
-                label = context.getString(R.string.camera_postprocess_label),
-                value = "${postProcessTime}ms",
-                color = Color(0xFFFF9800)
-            )
-
-            val totalTime = preProcessTime + inferenceTime + postProcessTime
-            SpeedInfoRow(
-                label = context.getString(R.string.camera_total_time_label),
-                value = "${totalTime}ms",
-                color = Color.White,
-                fontWeight = FontWeight.Bold
-            )
-        }
-    }
-}
-
-@Composable
-fun SpeedInfoRow(
-    label: String,
-    value: String,
-    color: Color = Color.White,
-    fontWeight: FontWeight? = null
-) {
-    Row(
-        modifier = Modifier.padding(vertical = 2.dp)
-    ) {
-        Text(
-            text = label,
-            color = color,
-            fontSize = 12.sp,
-            fontWeight = fontWeight
-        )
-        Text(
-            text = value,
-            color = color,
-            fontSize = 12.sp,
-            fontWeight = fontWeight
-        )
-    }
-}
 
 fun Float.format(digits: Int) = "%.${digits}f".format(this)

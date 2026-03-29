@@ -67,7 +67,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.sawwere.yoloapp.R
-import com.sawwere.yoloapp.core.config.EmulatorUtils.isEmulator
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.Photo
 import com.sawwere.yoloapp.ui.common.DeleteDialog

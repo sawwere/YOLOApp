@@ -21,7 +21,9 @@ import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenMode
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenNavigation
 import com.sawwere.yoloapp.ui.camera.usecase.ValidateObject
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +37,8 @@ data class CameraScreenUIState(
     val postProcessTime: Long = 0L,
     val debugMode: Boolean = false,
     val zoomProgress: Float = 0f,
-    val drawMode: String = CameraScreenMode.ADD.value
+    val drawMode: String = CameraScreenMode.ADD.value,
+    val errorMessage: String? = null
 )
 
 @HiltViewModel
@@ -94,10 +97,6 @@ class CameraScreenViewModel @Inject constructor(
     private val _currentSegmentIndex = mutableIntStateOf(0)
     val currentSegmentIndex: Int get() = _currentSegmentIndex.intValue
 
-    // Количество найденных объектов
-    private val _detectedObjectsCount = MutableStateFlow(0)
-    val detectedObjectsCount = _detectedObjectsCount.asStateFlow()
-
     private var minZoomRatio = 1f
     private var maxZoomRatio = 1f
 
@@ -115,7 +114,6 @@ class CameraScreenViewModel @Inject constructor(
             )
         }
         _detectedBoxes.value = detectionResults
-        _detectedObjectsCount.value = detectionResults.size
     }
 
     fun toggleDebugMode() {
@@ -141,6 +139,8 @@ class CameraScreenViewModel @Inject constructor(
                 ).forEach {
                     addProcessedSegment(it, categoryId)
                 }
+            } catch (e: Exception) {
+                setError(e.message ?: "Ошибка при обработке снимка")
             } finally {
                 if (!bitmapCopy.isRecycled) {
                     bitmapCopy.recycle()
@@ -170,14 +170,21 @@ class CameraScreenViewModel @Inject constructor(
                     val croppedSegment = ImageUtils.extractRectSegment(originalBitmap, detection.bbox)
 
                     if (croppedSegment != null) {
-                        //result.add(croppedSegment.copy(croppedSegment.config!!, true))
+                        if (uiState.value.debugMode) {
+                            val x = croppedSegment.copy(croppedSegment.config!!, false)
+                            viewModelScope.launch(Dispatchers.IO, CoroutineStart.DEFAULT) {
+                                delay(500)
+                                appRepository.insertPhoto(categoryId, x)
+                                x.recycle()
+                            }
+
+                        }
                         val processedBitmap = processSingleSegment(croppedSegment)
                         Log.d(
                             TAG,
                             "Processed bitmap for object $index: ${processedBitmap.width}x${processedBitmap.height} ${processedBitmap.byteCount}"
                         )
                         result.add(processedBitmap)
-                        //addProcessedSegment(processedBitmap, categoryId)
 
                         croppedSegment.recycle()
                     } else {
@@ -187,10 +194,12 @@ class CameraScreenViewModel @Inject constructor(
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing object $index: ${e.message}", e)
+                    throw e
                 }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error processing captured segments: ${e.message}", e)
+            setError("Error processing captured segments")
         }
 
         return result
@@ -300,12 +309,17 @@ class CameraScreenViewModel @Inject constructor(
         }
     }
 
-    companion object {
-        private const val TAG = "CameraScreenViewModel"
+    fun setError(message: String) {
+        _uiState.update { it.copy(errorMessage = message) }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
 
     override fun onError(error: String) {
-        Log.e(TAG, error) // TODO
+        Log.e(TAG, error)
+        setError(message = error)
     }
 
     override fun onEmpty() {
@@ -325,13 +339,11 @@ class CameraScreenViewModel @Inject constructor(
             postProcessTime = postProcessTime,
             detectionResults = results
         )
-
-        val processedDetections = processCapturedSegments(
-            originalBitmap = originalBitmap,
-            detectionBoxes = results
-        )
-
         if (drawMode == CameraScreenMode.CHECK.value) {
+            val processedDetections = processCapturedSegments(
+                originalBitmap = originalBitmap,
+                detectionBoxes = results
+            )
             for ((index, detection) in processedDetections.withIndex()) {
                 val res = validateObject(detection, category)
                 results[index].classId = when(res) {
@@ -346,8 +358,6 @@ class CameraScreenViewModel @Inject constructor(
             }
         }
 
-
-        // Создаем сегментированное изображение для отображения в реальном времени
         segmentedBitmap = if (results.isEmpty()) {
             null
         } else {
@@ -358,5 +368,9 @@ class CameraScreenViewModel @Inject constructor(
                 drawOverlay = drawMode == CameraScreenMode.CHECK.value
             )
         }
+    }
+
+    companion object {
+        private const val TAG = "CameraScreenViewModel"
     }
 }

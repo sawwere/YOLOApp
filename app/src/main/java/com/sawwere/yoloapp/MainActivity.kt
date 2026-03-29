@@ -57,9 +57,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         if (OpenCVLoader.initLocal()) {
-            Log.i("MainActivity", "OpenCV loaded successfully")
+            Log.i(TAG, "OpenCV loaded successfully")
         } else {
-            Log.e("MainActivity", "OpenCV initialization failed!")
+            Log.e(TAG, "OpenCV initialization failed!")
             Toast.makeText(this, "OpenCV initialization failed!", Toast.LENGTH_LONG).show()
             return
         }
@@ -173,7 +173,7 @@ class MainActivity : ComponentActivity() {
                 )
                 viewModel.setupZoomState(camera)
             } catch (exc: Exception) {
-                Log.e("CameraX", "Use case binding failed", exc)
+                Log.e(TAG, "Use case binding failed", exc)
             }
         }, ContextCompat.getMainExecutor(this))
     }
@@ -219,5 +219,9 @@ class MainActivity : ComponentActivity() {
             originalBitmap = rotatedBitmap
             detectionComponent.invoke(rotatedBitmap)
         }
+    }
+
+    companion object {
+        private const val TAG = "MainActivity"
     }
 }
