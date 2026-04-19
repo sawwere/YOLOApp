@@ -10,6 +10,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.sawwere.yoloapp.core.config.CAMERA_SMALL_HEIGHT
+import com.sawwere.yoloapp.core.config.CAMERA_SMALL_WIDTH
 import com.sawwere.yoloapp.core.config.EmulatorUtils
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.detection.DetectionComponent
@@ -113,20 +115,23 @@ class CameraScreenViewModel @Inject constructor(
                 postProcessTime = postProcessTime
             )
         }
-        _detectedBoxes.value = detectionResults
+         _detectedBoxes.value = detectionResults
     }
 
     fun toggleDebugMode() {
         _uiState.update { it.copy(debugMode = !it.debugMode) }
     }
 
-    fun onCapture(bitmap: Bitmap, categoryId: Long) {
+    fun onCapture(
+        bitmap: Bitmap,
+        categoryId: Long,
+        scaledDetections: List<DetectionComponent.Detection>
+    ) {
         _capturedBitmap.value = bitmap
         Log.i(
             TAG,
             "width=${capturedBitmap!!.width} height=${capturedBitmap!!.height}"
         )
-        val capturedBoxes = detectedBoxes.value
         viewModelScope.launch(Dispatchers.IO) {
             val bitmapCopy = bitmap.copy(bitmap.config!!, true)
             if (EmulatorUtils.isEmulator()) {
@@ -135,7 +140,7 @@ class CameraScreenViewModel @Inject constructor(
             try {
                 processCapturedSegments(
                     originalBitmap = bitmapCopy,
-                    detectionBoxes = capturedBoxes
+                    detectionBoxes = scaledDetections
                 ).forEach {
                     addProcessedSegment(it, categoryId)
                 }
@@ -158,7 +163,7 @@ class CameraScreenViewModel @Inject constructor(
 
         clearAllSegments()
         if (detectionBoxes.isEmpty()) {
-            Log.d(TAG, "No captured data to process")
+            Log.w(TAG, "No captured data to process")
         }
 
         val result = mutableListOf<Bitmap>()
@@ -169,29 +174,20 @@ class CameraScreenViewModel @Inject constructor(
 
                     val croppedSegment = ImageUtils.extractRectSegment(originalBitmap, detection.bbox)
 
-                    if (croppedSegment != null) {
-                        if (uiState.value.debugMode) {
-                            val x = croppedSegment.copy(croppedSegment.config!!, false)
-                            viewModelScope.launch(Dispatchers.IO, CoroutineStart.DEFAULT) {
-                                delay(500)
-                                appRepository.insertPhoto(categoryId, x)
-                                x.recycle()
-                            }
-
+                    if (uiState.value.debugMode) {
+                        val x = croppedSegment.copy(croppedSegment.config!!, false)
+                        viewModelScope.launch(Dispatchers.IO, CoroutineStart.DEFAULT) {
+                            delay(500)
+                            appRepository.insertPhoto(categoryId, x)
+                            x.recycle()
                         }
-                        val processedBitmap = processSingleSegment(croppedSegment)
-                        Log.d(
-                            TAG,
-                            "Processed bitmap for object $index: ${processedBitmap.width}x${processedBitmap.height} ${processedBitmap.byteCount}"
-                        )
-                        result.add(processedBitmap)
 
-                        croppedSegment.recycle()
-                    } else {
-                        Log.w(TAG, "Cropped segment is null for object $index")
-                        Log.w(TAG, "BBox: [${detection.bbox.left}, ${detection.bbox.top}, ${detection.bbox.right}, ${detection.bbox.bottom}]")
-                        Log.w(TAG, "Image size: ${originalBitmap.width}x${originalBitmap.height}")
                     }
+                    val processedBitmap = processSingleSegment(croppedSegment)
+                    Log.d(TAG, "Processed bitmap for object $index")
+                    result.add(processedBitmap)
+
+                    croppedSegment.recycle()
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing object $index: ${e.message}", e)
                     throw e
@@ -362,8 +358,8 @@ class CameraScreenViewModel @Inject constructor(
             null
         } else {
             drawImages(
-                imageWidth = 480,
-                imageHeight = 640,
+                imageWidth = CAMERA_SMALL_WIDTH,
+                imageHeight = CAMERA_SMALL_HEIGHT,
                 results = results,
                 drawOverlay = drawMode == CameraScreenMode.CHECK.value
             )

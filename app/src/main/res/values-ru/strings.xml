@@ -44,4 +44,5 @@
     <string name="ui_common_loading_error">Ошибка загрузки</string>
     <string name="ui_common_error">Ошибка</string>
     <string name="camera_screen_objects_found_label">Объекты обнаружены (%1$s)</string>
+    <string name="capture_error">Ошибка при снятии фото</string>
 </resources>

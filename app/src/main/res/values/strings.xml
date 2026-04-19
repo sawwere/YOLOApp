@@ -44,4 +44,5 @@
     <string name="ui_common_loading_error">Loading error</string>
     <string name="ui_common_error">Error</string>
     <string name="camera_screen_objects_found_label">Found objects (%1$s)</string>
+    <string name="capture_error">Photo capture failed</string>
 </resources>
