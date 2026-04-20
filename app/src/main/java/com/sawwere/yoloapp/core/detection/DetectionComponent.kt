@@ -6,6 +6,7 @@ import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
 import com.sawwere.yoloapp.core.detection.MetaData.extractNamesFromMetadata
+import com.sawwere.yoloapp.core.system.camera.AnalyzeFrame
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
@@ -21,7 +22,7 @@ class DetectionComponent(
     context: Context,
     modelPath: String,
     labelPath: String?,
-) {
+): AnalyzeFrame {
     private var interpreter: Interpreter
     private var labels = mutableListOf<String>()
 
@@ -111,11 +112,17 @@ class DetectionComponent(
         listeners.add(listener)
     }
 
+    fun unsubscribe(
+        listener: InstanceSegmentationListener
+    ) {
+        listeners.remove(listener)
+    }
+
     fun close() {
         interpreter.close()
     }
 
-    fun invoke(frame: Bitmap) {
+    override fun invoke(frame: Bitmap) {
 //        if (tensorWidth == 0 || tensorHeight == 0
 //            || numChannel == 0 || numElements == 0
 //            || xPoints == 0 || yPoints == 0 || masksNum == 0) {

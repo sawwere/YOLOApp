@@ -2,11 +2,12 @@ package com.sawwere.yoloapp.ui.camera
 
 import android.graphics.Bitmap
 import android.util.Log
-import androidx.camera.core.Camera
+import androidx.camera.view.PreviewView
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -18,7 +19,9 @@ import com.sawwere.yoloapp.core.detection.DetectionComponent
 import com.sawwere.yoloapp.core.domain.image.DrawImages
 import com.sawwere.yoloapp.core.domain.image.ImageProcessor
 import com.sawwere.yoloapp.core.domain.image.ImageUtils
+import com.sawwere.yoloapp.core.domain.image.ImageUtils.scaleRect
 import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import com.sawwere.yoloapp.core.system.camera.CameraController
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenMode
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenNavigation
 import com.sawwere.yoloapp.ui.camera.usecase.ValidateObject
@@ -46,17 +49,16 @@ data class CameraScreenUIState(
 @HiltViewModel
 class CameraScreenViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
+    private val cameraController: CameraController,
     private val appRepository: AppRepository,
     private val imageProcessor: ImageProcessor,
     private val drawImages: DrawImages,
     private val detectionComponent: DetectionComponent,
     private val validateObject: ValidateObject
-): ViewModel(), DetectionComponent.InstanceSegmentationListener {
+) : ViewModel(), DetectionComponent.InstanceSegmentationListener {
     init {
         detectionComponent.subscrube(this)
     }
-
-    private lateinit var camera: Camera
 
     private val _uiState = MutableStateFlow(CameraScreenUIState())
     val uiState: StateFlow<CameraScreenUIState> = _uiState.asStateFlow()
@@ -86,9 +88,6 @@ class CameraScreenViewModel @Inject constructor(
 
     var segmentedBitmap: Bitmap? by mutableStateOf(null)
 
-    private val _capturedBitmap = MutableStateFlow<Bitmap?>(null)
-    val capturedBitmap get() = _capturedBitmap.value
-
     private val _detectedBoxes = MutableStateFlow<List<DetectionComponent.Detection>>(emptyList())
     val detectedBoxes: StateFlow<List<DetectionComponent.Detection>> = _detectedBoxes.asStateFlow()
     // Список обработанных сегментов
@@ -98,9 +97,6 @@ class CameraScreenViewModel @Inject constructor(
     // Текущий индекс отображаемого сегмента
     private val _currentSegmentIndex = mutableIntStateOf(0)
     val currentSegmentIndex: Int get() = _currentSegmentIndex.intValue
-
-    private var minZoomRatio = 1f
-    private var maxZoomRatio = 1f
 
     private fun updateDetectionState(
         preProcessTime: Long,
@@ -122,16 +118,36 @@ class CameraScreenViewModel @Inject constructor(
         _uiState.update { it.copy(debugMode = !it.debugMode) }
     }
 
-    fun onCapture(
+    fun captureCurrentFrame() {
+        val currentDetections = _detectedBoxes.value
+        cameraController.capturePhoto { bitmap ->
+            if (bitmap == null) {
+                setError("Не удалось сделать фото")
+                return@capturePhoto
+            }
+
+            if (currentDetections.isNotEmpty()) {
+                val scaledBoxes = currentDetections.map { detection ->
+                    val scaledRect = scaleRect(
+                        detection.bbox,
+                        CAMERA_SMALL_WIDTH to CAMERA_SMALL_HEIGHT,
+                        bitmap.width to bitmap.height
+                    )
+                    detection.copy(bbox = scaledRect)
+                }
+                onCapture(bitmap, categoryId, scaledBoxes)
+            } else {
+                setError("На фото нет объектов")
+                bitmap.recycle()
+            }
+        }
+    }
+
+    private fun onCapture(
         bitmap: Bitmap,
         categoryId: Long,
         scaledDetections: List<DetectionComponent.Detection>
     ) {
-        _capturedBitmap.value = bitmap
-        Log.i(
-            TAG,
-            "width=${capturedBitmap!!.width} height=${capturedBitmap!!.height}"
-        )
         viewModelScope.launch(Dispatchers.IO) {
             val bitmapCopy = bitmap.copy(bitmap.config!!, true)
             if (EmulatorUtils.isEmulator()) {
@@ -170,8 +186,6 @@ class CameraScreenViewModel @Inject constructor(
         try {
             for ((index, detection) in detectionBoxes.withIndex()) {
                 try {
-                    Log.d(TAG, "Processing detection $index")
-
                     val croppedSegment = ImageUtils.extractRectSegment(originalBitmap, detection.bbox)
 
                     if (uiState.value.debugMode) {
@@ -181,7 +195,6 @@ class CameraScreenViewModel @Inject constructor(
                             appRepository.insertPhoto(categoryId, x)
                             x.recycle()
                         }
-
                     }
                     val processedBitmap = processSingleSegment(croppedSegment)
                     Log.d(TAG, "Processed bitmap for object $index")
@@ -205,11 +218,6 @@ class CameraScreenViewModel @Inject constructor(
         return imageProcessor.processDocumentImageEnhanced(
             segmentBitmap.copy(segmentBitmap.config!!, true)
         )
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        _capturedBitmap.value?.takeIf { !it.isRecycled }?.recycle()
     }
 
     private fun addProcessedSegment(bitmap: Bitmap, categoryId: Long) {
@@ -265,47 +273,39 @@ class CameraScreenViewModel @Inject constructor(
         }
     }
 
-    fun setupZoomState(camera: Camera) {
-        this.camera = camera
-
-        val zoomState = camera.cameraInfo.zoomState.value
-        zoomState?.let {
-            minZoomRatio = zoomState.minZoomRatio
-            maxZoomRatio = zoomState.maxZoomRatio
-            val initialProgress = calculateZoomProgress(zoomState.zoomRatio)
-            _uiState.update { it.copy(zoomProgress = initialProgress) }
+    fun startCamera(previewView: PreviewView, lifecycleOwner: LifecycleOwner) {
+        cameraController.startCamera(previewView, lifecycleOwner) { camera ->
+            val (minZoom, maxZoom) = cameraController.getMinMaxZoom()
+            val currentZoom = cameraController.getZoomRatio()
+            val progress = calculateZoomProgress(currentZoom, minZoom, maxZoom)
+            _uiState.update { it.copy(zoomProgress = progress) }
         }
     }
 
-    fun updateCameraZoom(newZoomValue: Float) {
-        _uiState.update { it.copy(zoomProgress = newZoomValue) }
-        camera.let { cam ->
-            val newZoomRatio = minZoomRatio + (newZoomValue / 10f) * (maxZoomRatio - minZoomRatio)
-            cam.cameraControl.setZoomRatio(newZoomRatio)
-        }
+    fun updateCameraZoom(progress: Float) {
+        _uiState.update { it.copy(zoomProgress = progress) }
+        val (minZoom, maxZoom) = cameraController.getMinMaxZoom()
+        val newZoomRatio = minZoom + (progress / 10f) * (maxZoom - minZoom)
+        cameraController.setZoomRatio(newZoomRatio)
     }
 
     fun handlePinchZoom(scaleFactor: Float) {
-        camera.let { cam ->
-            val zoomState = cam.cameraInfo.zoomState.value ?: return
-            val currentZoom = zoomState.zoomRatio
-            val newZoom = currentZoom * scaleFactor
-            val clampedZoom = newZoom.coerceIn(minZoomRatio, maxZoomRatio)
-            cam.cameraControl.setZoomRatio(clampedZoom)
-            val newProgress = calculateZoomProgress(clampedZoom)
-            _uiState.update { it.copy(zoomProgress = newProgress) }
-        }
+        val currentZoom = cameraController.getZoomRatio()
+        val (minZoom, maxZoom) = cameraController.getMinMaxZoom()
+        var newZoom = currentZoom * scaleFactor
+        newZoom = newZoom.coerceIn(minZoom, maxZoom)
+        cameraController.setZoomRatio(newZoom)
+        val newProgress = calculateZoomProgress(newZoom, minZoom, maxZoom)
+        _uiState.update { it.copy(zoomProgress = newProgress) }
     }
 
-    private fun calculateZoomProgress(zoomRatio: Float): Float {
-        return if (maxZoomRatio > minZoomRatio) {
-            ((zoomRatio - minZoomRatio) / (maxZoomRatio - minZoomRatio)) * 10f
-        } else {
-            0f
-        }
+    private fun calculateZoomProgress(zoomRatio: Float, minZoom: Float, maxZoom: Float): Float {
+        return if (maxZoom > minZoom) {
+            ((zoomRatio - minZoom) / (maxZoom - minZoom)) * 10f
+        } else 0f
     }
 
-    fun setError(message: String) {
+    private fun setError(message: String) {
         _uiState.update { it.copy(errorMessage = message) }
     }
 
@@ -364,6 +364,12 @@ class CameraScreenViewModel @Inject constructor(
                 drawOverlay = drawMode == CameraScreenMode.CHECK.value
             )
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        cameraController.shutdown()
+        detectionComponent.unsubscribe(this)
     }
 
     companion object {

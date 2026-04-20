@@ -59,7 +59,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.sawwere.yoloapp.MainActivity
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.sawwere.yoloapp.R
 import com.sawwere.yoloapp.core.system.VibrationComponent
 import com.sawwere.yoloapp.ui.camera.component.ShutterButton
@@ -75,6 +75,7 @@ fun CameraScreen(
     viewModel: CameraScreenViewModel,
 ) {
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     val segmentedBitmap = viewModel.segmentedBitmap
 
@@ -191,8 +192,8 @@ fun CameraScreen(
             }
 
             LaunchedEffect(previewView) {
-                if (previewView != null) {
-                    (context as? MainActivity)?.startCamera(previewView!!)
+                previewView?.let {
+                    viewModel.startCamera(it, lifecycleOwner)
                 }
             }
         }

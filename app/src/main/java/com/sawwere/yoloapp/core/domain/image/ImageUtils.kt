@@ -23,7 +23,7 @@ object ImageUtils {
         val right = boundingBox.right.toInt()
         val bottom = boundingBox.bottom.toInt()
 
-        require(left >= right && top >= bottom)
+        require(left <= right && top <= bottom)
         require(padding >= 0)
 
         val clampedLeft = max(left - padding, 0)
