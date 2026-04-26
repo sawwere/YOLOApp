@@ -49,6 +49,6 @@ class ValidateObjectImpl @Inject constructor(
     }
 
     companion object {
-        private const val CONFIDENCE_THRESHOLD = 1.5f
+        private const val CONFIDENCE_THRESHOLD = 0.3f
     }
 }

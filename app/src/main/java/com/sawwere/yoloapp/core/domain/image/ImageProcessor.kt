@@ -16,8 +16,8 @@ import kotlin.math.max
 class ImageProcessor {
     companion object {
         private const val TARGET_SIZE = 224
-        private const val ADAPTIVE_THRESH_BLOCK_SIZE = 31
-        private const val ADAPTIVE_THRESH_C = 15.0
+        private const val ADAPTIVE_THRESH_BLOCK_SIZE = 15
+        private const val ADAPTIVE_THRESH_C = 11.0
         private const val MEDIAN_BLUR_SIZE = 3
         private const val MORPH_KERNEL_SIZE = 3
     }
@@ -149,19 +149,14 @@ class ImageProcessor {
         val grayMat = Mat()
         Imgproc.cvtColor(srcMat, grayMat, Imgproc.COLOR_RGB2GRAY)
 
-        // 2. Улучшение контраста (CLAHE - Contrast Limited Adaptive Histogram Equalization)
-        val clahe = Imgproc.createCLAHE(2.0, Size(8.0, 8.0))
-        val enhancedMat = Mat()
-        clahe.apply(grayMat, enhancedMat)
-
         // 3. Гауссово размытие для уменьшения шума
         val blurredMat = Mat()
-        Imgproc.GaussianBlur(enhancedMat, blurredMat, Size(5.0, 5.0), 0.0)
+        Imgproc.GaussianBlur(grayMat, blurredMat, Size(3.0, 3.0), 0.0)
 
         // 4. Адаптивная бинаризация с Otsu
         val binaryMat = Mat()
         Imgproc.adaptiveThreshold(
-            grayMat,
+            blurredMat,
             binaryMat,
             255.0,
             Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
@@ -170,12 +165,11 @@ class ImageProcessor {
             ADAPTIVE_THRESH_C
         )
 
-        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(3.0, 3.0))
+        val kernel = Mat(2, 2,  CvType.CV_8UC1, Scalar(1.0))
         val morphedMat = Mat()
-        Imgproc.morphologyEx(binaryMat, morphedMat, Imgproc.MORPH_CLOSE, kernel)
-        Imgproc.morphologyEx(morphedMat, morphedMat, Imgproc.MORPH_OPEN, kernel)
+        Imgproc.erode(binaryMat, morphedMat, kernel)
 
-        val documentMat = findDocument(grayMat)
+        val documentMat = findDocument(morphedMat)
 
         val normalizedMat = normalizeToSquare(documentMat, TARGET_SIZE)
 
@@ -184,14 +178,12 @@ class ImageProcessor {
 
         srcMat.release()
         grayMat.release()
-        enhancedMat.release()
         blurredMat.release()
         binaryMat.release()
         kernel.release()
         morphedMat.release()
         documentMat.release()
         normalizedMat.release()
-        //clahe.release()
 
         return resultBitmap
     }
