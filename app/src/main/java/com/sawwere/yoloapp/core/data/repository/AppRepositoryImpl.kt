@@ -2,6 +2,7 @@ package com.sawwere.yoloapp.core.data.repository
 
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.core.net.toFile
 import com.sawwere.yoloapp.core.data.dao.AppDao
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.CategoryWithPhotos
@@ -103,6 +104,22 @@ class AppRepositoryImpl @Inject constructor(
             } catch (e: Exception) {
                 Result.failure(e)
             }
+        }
+    }
+
+    override suspend fun insertPhoto(
+        categoryId: Long,
+        imageUri: Uri,
+        description: String
+    ): Result<Uri> {
+        return withContext(Dispatchers.IO) {
+            val image = mediaStoreRepository.loadImageFromPublicStorage(imageUri)
+                ?: return@withContext Result.failure(NoSuchFileException(imageUri.toFile()))
+            insertPhoto(
+                categoryId = categoryId,
+                bitmap = image,
+                description = description
+            )
         }
     }
 

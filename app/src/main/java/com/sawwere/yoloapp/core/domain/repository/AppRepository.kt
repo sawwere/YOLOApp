@@ -30,6 +30,12 @@ interface AppRepository {
         description: String = ""
     ): Result<Uri>
 
+    suspend fun insertPhoto(
+        categoryId: Long,
+        imageUri: Uri,
+        description: String = "Imported"
+    ): Result<Uri>
+
     suspend fun getPhotoCountInCategory(categoryId: Long): Int
 
     suspend fun getLatestPhotoInCategory(categoryId: Long): Photo?

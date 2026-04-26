@@ -1,10 +1,13 @@
 package com.sawwere.yoloapp.ui.category.detail
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -27,9 +31,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.BrowseGallery
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
@@ -38,6 +45,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -57,6 +65,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -100,15 +109,36 @@ fun CategoryDetailScreen(
 
     var photoToDelete by remember { mutableStateOf<Photo?>(null) }
 
-    val recalculateState by viewModel.recalculateState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val uiState by viewModel.uiState.collectAsState()
 
     val hasPhotos = photos.isNotEmpty()
     val hasVector = category?.checksum != null
-    val isCheckEnabled = hasPhotos && hasVector
 
-    LaunchedEffect(recalculateState) {
-        when (recalculateState) {
+    val galleryLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { uri ->
+                viewModel.addPhoto(uri)
+            }
+        }
+    }
+    val onCameraClickActual = {
+        viewModel.toggleFabMenu()
+        onAddPhotoClick()
+    }
+    val onGalleryClickActual = {
+        viewModel.toggleFabMenu()
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+        }
+        galleryLauncher.launch(intent)
+    }
+
+    LaunchedEffect(uiState.recalculateState) {
+        when (uiState.recalculateState) {
             is RecalculateState.Success -> {
                 snackbarHostState.showSnackbar(
                     message = "Вектор контрольных сумм пересчитан",
@@ -117,7 +147,7 @@ fun CategoryDetailScreen(
             }
             is RecalculateState.Error -> {
                 snackbarHostState.showSnackbar(
-                    message = (recalculateState as RecalculateState.Error).message,
+                    message = (uiState.recalculateState as RecalculateState.Error).message,
                     duration = SnackbarDuration.Long
                 )
             }
@@ -195,7 +225,11 @@ fun CategoryDetailScreen(
                         ).show()
                     }
                 },
-                onPhotoDelete = { photo -> photoToDelete = photo }
+                onPhotoDelete = { photo -> photoToDelete = photo },
+                onAddPhotoClick = onCameraClickActual,
+                onAddGalleryClick = onGalleryClickActual,
+                viewModel = viewModel,
+                uiState = uiState,
             )
             Column(
                 modifier = Modifier
@@ -203,57 +237,57 @@ fun CategoryDetailScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                if (hasPhotos) {
-                    Button(
-                        onClick = onCheckClick,
-                        enabled = isCheckEnabled,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Primary500,
-                            contentColor = NeutralWhite,
-                            disabledContainerColor = Primary500.copy(alpha = 0.5f),
-                            disabledContentColor = NeutralWhite.copy(alpha = 0.5f)
-                        )
-                    ) {
-                        Text(
-                            text = stringResource(R.string.category_detail_check_button),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
                 Button(
-                    onClick = { viewModel.recalculateChecksum() },
-                    enabled = hasPhotos,
+                    onClick = onCheckClick,
+                    enabled = hasVector,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Secondary500,
+                        containerColor = Primary500,
                         contentColor = NeutralWhite,
-                        disabledContainerColor = Secondary500.copy(alpha = 0.5f),
+                        disabledContainerColor = Primary500.copy(alpha = 0.5f),
                         disabledContentColor = NeutralWhite.copy(alpha = 0.5f)
                     )
                 ) {
-                    if (recalculateState is RecalculateState.InProgress) {
-                        CircularProgressIndicator(
-                            color = NeutralWhite,
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp
+                    Text(
+                        text = stringResource(R.string.category_detail_check_button),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                if (hasPhotos) {
+                    Button(
+                        onClick = { viewModel.recalculateChecksum() },
+                        enabled = hasPhotos,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Secondary500,
+                            contentColor = NeutralWhite,
+                            disabledContainerColor = Secondary500.copy(alpha = 0.5f),
+                            disabledContentColor = NeutralWhite.copy(alpha = 0.5f)
                         )
-                    } else {
-                        Text(
-                            text = stringResource(
-                                R.string.category_detail_recalculate_vector_button
-                            ),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Medium
-                        )
+                    ) {
+                        if (uiState.recalculateState is RecalculateState.InProgress) {
+                            CircularProgressIndicator(
+                                color = NeutralWhite,
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(
+                                text = stringResource(
+                                    R.string.category_detail_recalculate_vector_button
+                                ),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
@@ -352,70 +386,124 @@ private fun InfoRow(label: String, value: String) {
 @Composable
 private fun GallerySection(
     modifier: Modifier = Modifier,
+    uiState: CategoryDetailScreenUIState,
     photos: List<Photo>,
     onPhotoClick: (Photo) -> Unit,
-    onPhotoDelete: (Photo) -> Unit
+    onPhotoDelete: (Photo) -> Unit,
+    onAddPhotoClick: () -> Unit,
+    onAddGalleryClick: () -> Unit,
+    viewModel: CategoryDetailScreenViewModel
 ) {
-    Column(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .fillMaxHeight()
     ) {
-        Text(
-            text = stringResource(R.string.category_detail_images_title),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .padding(horizontal = 16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.category_detail_images_title),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
 
-        if (photos.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
+            if (photos.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PhotoLibrary,
-                        contentDescription = stringResource(
-                            R.string.category_detail_no_images_title
-                        ),
-                        modifier = Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.category_detail_no_images_title),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.category_detail_no_images_add_first_image_suggestion
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = stringResource(R.string.category_detail_no_images_title),
+                            modifier = Modifier.size(48.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.category_detail_no_images_title),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = stringResource(R.string.category_detail_no_images_add_first_image_suggestion),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(3),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight()
+                ) {
+                    items(photos) { photo ->
+                        PhotoGridItem(
+                            photo = photo,
+                            onClick = { onPhotoClick(photo) },
+                            onDeleteClick = { onPhotoDelete(photo) }
+                        )
+                    }
                 }
             }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxHeight()
-            ) {
-                items(photos) { photo ->
-                    PhotoGridItem(
-                        photo = photo,
-                        onClick = { onPhotoClick(photo) },
-                        onDeleteClick = { onPhotoDelete(photo) }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+
+            contentAlignment = Alignment.BottomEnd
+        ) {
+            if (uiState.isFabMenuExpanded) {
+                FloatingActionButton(
+                    onClick = onAddGalleryClick,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(y = (-70).dp),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary
+                ) {
+                    Icon(
+                        Icons.Default.PhotoLibrary,
+                        contentDescription = "Select from the gallery"
                     )
                 }
+
+                FloatingActionButton(
+                    onClick = onAddPhotoClick,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .offset(y = (-150).dp),
+                    shape = CircleShape,
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary
+                ) {
+                    Icon(Icons.Default.CameraAlt, contentDescription = "Take picture")
+                }
+            }
+
+            FloatingActionButton(
+                onClick = { viewModel.toggleFabMenu() },
+                shape = CircleShape,
+                containerColor = Primary500,
+                contentColor = NeutralWhite
+            ) {
+                Icon(
+                    if (uiState.isFabMenuExpanded) Icons.Default.Close else Icons.Default.Add,
+                    contentDescription = if (uiState.isFabMenuExpanded) "Close menu" else "Open menu"
+                )
             }
         }
     }

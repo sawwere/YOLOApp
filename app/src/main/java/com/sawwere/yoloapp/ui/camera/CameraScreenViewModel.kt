@@ -137,8 +137,13 @@ class CameraScreenViewModel @Inject constructor(
                 }
                 onCapture(bitmap, categoryId, scaledBoxes)
             } else {
-                setError("На фото нет объектов")
-                bitmap.recycle()
+                if (EmulatorUtils.isEmulator()) {
+                    onCapture(bitmap, categoryId, emptyList())
+                } else {
+                    setError("На фото нет объектов")
+                    bitmap.recycle()
+                }
+
             }
         }
     }
