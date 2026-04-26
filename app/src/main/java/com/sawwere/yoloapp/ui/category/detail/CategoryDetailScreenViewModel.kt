@@ -1,12 +1,12 @@
 package com.sawwere.yoloapp.ui.category.detail
 
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sawwere.yoloapp.core.data.entity.CategoryWithPhotos
-import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import com.sawwere.yoloapp.core.domain.photo.PhotoRepository
+import com.sawwere.yoloapp.core.domain.category.CategoryRepository
 import com.sawwere.yoloapp.ui.category.detail.navigation.CATEGORY_ID_ARG
 import com.sawwere.yoloapp.ui.category.detail.usecase.RecalculateChecksum
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -36,7 +36,8 @@ data class CategoryDetailScreenUIState(
 @HiltViewModel
 class CategoryDetailScreenViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val repository: AppRepository,
+    private val repository: PhotoRepository,
+    private val categoryRepository: CategoryRepository,
     private val recalculateChecksum: RecalculateChecksum
 ) : ViewModel() {
     private val categoryId: Long = savedStateHandle[CATEGORY_ID_ARG]
@@ -54,10 +55,9 @@ class CategoryDetailScreenViewModel @Inject constructor(
     val uiState: StateFlow<CategoryDetailScreenUIState> = _uiState.asStateFlow()
 
     private fun loadCategoryWithPhotos() {
-        viewModelScope.launch {
-            repository.getCategoryWithPhotos(categoryId).collect { data ->
-                _categoryWithPhotos.value = data
-            }
+        viewModelScope.launch(Dispatchers.IO) {
+            val data = categoryRepository.getCategoryWithPhotos(categoryId)
+            _categoryWithPhotos.value = data
         }
     }
 
@@ -71,7 +71,7 @@ class CategoryDetailScreenViewModel @Inject constructor(
 
     fun deletePhoto(photoId: Long) {
         viewModelScope.launch {
-            val success = repository.deletePhoto(photoId)
+            val success = repository.delete(photoId)
             if (success) {
                 loadCategoryWithPhotos()
             }
@@ -81,13 +81,14 @@ class CategoryDetailScreenViewModel @Inject constructor(
     fun addPhoto(photoUri: Uri) {
         viewModelScope.launch {
             val result = addPhotoFromUri(photoUri)
+            loadCategoryWithPhotos()
         }
     }
 
     private suspend fun addPhotoFromUri(uri: Uri): Boolean {
         return withContext(Dispatchers.IO) {
             try {
-                val result = repository.insertPhoto(categoryId, uri, "Imported from the gallery")
+                val result = repository.insert(categoryId, uri, "Imported from the gallery")
                 result.isSuccess
             } catch (e: Exception) {
                 false

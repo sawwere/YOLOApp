@@ -3,9 +3,11 @@ package com.sawwere.yoloapp.core.data.di
 import android.content.Context
 import androidx.room.Room
 import com.sawwere.yoloapp.core.data.AppDatabase
-import com.sawwere.yoloapp.core.data.repository.AppRepositoryImpl
+import com.sawwere.yoloapp.core.data.repository.PhotoRepositoryImpl
+import com.sawwere.yoloapp.core.data.repository.CategoryRepositoryImpl
 import com.sawwere.yoloapp.core.data.repository.MediaStoreRepositoryImpl
-import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import com.sawwere.yoloapp.core.domain.photo.PhotoRepository
+import com.sawwere.yoloapp.core.domain.category.CategoryRepository
 import com.sawwere.yoloapp.core.domain.repository.MediaStoreRepository
 import dagger.Binds
 import dagger.Module
@@ -20,7 +22,10 @@ import javax.inject.Singleton
 class LocalSourceModuleProvider {
 
     @Provides
-    fun provideAppDao(database: AppDatabase) = database.appDao()
+    fun providePhotoDao(database: AppDatabase) = database.photoDao()
+
+    @Provides
+    fun provideCategoryDao(database: AppDatabase) = database.categoryDao()
 
     @Provides
     @Singleton
@@ -46,6 +51,11 @@ abstract class LocalSourceModuleBinder {
 
     @Binds
     abstract fun bindDefaultAppRepository(
-        defaultAppRepository: AppRepositoryImpl
-    ) : AppRepository
+        defaultAppRepository: PhotoRepositoryImpl
+    ) : PhotoRepository
+
+    @Binds
+    abstract fun bindCategoryRepository(
+        categoryRepository: CategoryRepositoryImpl
+    ) : CategoryRepository
 }

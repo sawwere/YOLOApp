@@ -6,7 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.sawwere.yoloapp.core.data.converter.Converters
-import com.sawwere.yoloapp.core.data.dao.AppDao
+import com.sawwere.yoloapp.core.data.dao.PhotoDao
+import com.sawwere.yoloapp.core.data.dao.CategoryDao
 import com.sawwere.yoloapp.core.data.entity.Category
 import com.sawwere.yoloapp.core.data.entity.Photo
 
@@ -17,7 +18,9 @@ import com.sawwere.yoloapp.core.data.entity.Photo
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun appDao(): AppDao
+    abstract fun photoDao(): PhotoDao
+
+    abstract fun categoryDao(): CategoryDao
 
     companion object {
         @Volatile

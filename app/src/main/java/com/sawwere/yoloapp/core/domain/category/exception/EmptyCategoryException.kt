@@ -1,4 +1,4 @@
-package com.sawwere.yoloapp.core.domain.exception
+package com.sawwere.yoloapp.core.domain.category.exception
 
 import java.lang.RuntimeException
 

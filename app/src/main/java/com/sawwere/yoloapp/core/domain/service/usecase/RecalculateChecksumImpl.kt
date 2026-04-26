@@ -2,8 +2,10 @@ package com.sawwere.yoloapp.core.domain.service.usecase
 
 import android.net.Uri
 import com.sawwere.yoloapp.core.detection.EmbeddingExtractorComponent
-import com.sawwere.yoloapp.core.domain.exception.EmptyCategoryException
-import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import com.sawwere.yoloapp.core.domain.category.exception.EmptyCategoryException
+import com.sawwere.yoloapp.core.domain.category.usecase.GetCategory
+import com.sawwere.yoloapp.core.domain.category.usecase.UpdateCategory
+import com.sawwere.yoloapp.core.domain.photo.PhotoRepository
 import com.sawwere.yoloapp.core.domain.repository.MediaStoreRepository
 import com.sawwere.yoloapp.ui.category.detail.usecase.RecalculateChecksum
 import kotlinx.coroutines.flow.first
@@ -13,13 +15,15 @@ import javax.inject.Singleton
 @Singleton
 class RecalculateChecksumImpl @Inject constructor(
     private val embeddingExtractorComponent: EmbeddingExtractorComponent,
-    private val repository: AppRepository,
+    private val repository: PhotoRepository,
+    private val getCategory: GetCategory,
+    private val updateCategory: UpdateCategory,
     private val mediaStoreRepository: MediaStoreRepository
 ) : RecalculateChecksum {
 
     override suspend operator fun invoke(categoryId: Long): Result<FloatArray> {
         return try {
-            val photos = repository.getPhotosByCategory(categoryId).first()
+            val photos = repository.getAllByCategory(categoryId).first()
             if (photos.isEmpty()) {
                 return Result.failure(EmptyCategoryException(categoryId))
             }
@@ -42,10 +46,10 @@ class RecalculateChecksumImpl @Inject constructor(
                 avgVector[i] = sum / vectors.size
             }
 
-            val category = repository.getCategoryById(categoryId)
+            val category = getCategory.getById(categoryId)
                 ?: throw NoSuchElementException("Catefory with id '$categoryId' not found")
             val updatedCategory = category.copy(checksum = avgVector)
-            repository.updateCategory(updatedCategory)
+            updateCategory.updateCategory(updatedCategory)
             repository.markAllPhotosAsProcessed(categoryId)
 
             Result.success(avgVector)

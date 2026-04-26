@@ -20,7 +20,8 @@ import com.sawwere.yoloapp.core.domain.image.DrawImages
 import com.sawwere.yoloapp.core.domain.image.ImageProcessor
 import com.sawwere.yoloapp.core.domain.image.ImageUtils
 import com.sawwere.yoloapp.core.domain.image.ImageUtils.scaleRect
-import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import com.sawwere.yoloapp.core.domain.photo.PhotoRepository
+import com.sawwere.yoloapp.core.domain.category.usecase.GetCategory
 import com.sawwere.yoloapp.core.system.camera.CameraController
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenMode
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenNavigation
@@ -50,7 +51,8 @@ data class CameraScreenUIState(
 class CameraScreenViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val cameraController: CameraController,
-    private val appRepository: AppRepository,
+    private val getCategory: GetCategory,
+    private val photoRepository: PhotoRepository,
     private val imageProcessor: ImageProcessor,
     private val drawImages: DrawImages,
     private val detectionComponent: DetectionComponent,
@@ -69,7 +71,7 @@ class CameraScreenViewModel @Inject constructor(
         set(value) {
             field = value
             viewModelScope.launch {
-                category = appRepository.getCategoryById(field)!!
+                category = getCategory.getById(field)!!
             }
         }
 
@@ -156,7 +158,7 @@ class CameraScreenViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val bitmapCopy = bitmap.copy(bitmap.config!!, true)
             if (EmulatorUtils.isEmulator()) {
-                appRepository.insertPhoto(categoryId, bitmapCopy)
+                photoRepository.insert(categoryId, bitmapCopy)
             }
             try {
                 processCapturedSegments(
@@ -197,7 +199,7 @@ class CameraScreenViewModel @Inject constructor(
                         val x = croppedSegment.copy(croppedSegment.config!!, false)
                         viewModelScope.launch(Dispatchers.IO, CoroutineStart.DEFAULT) {
                             delay(500)
-                            appRepository.insertPhoto(categoryId, x)
+                            photoRepository.insert(categoryId, x)
                             x.recycle()
                         }
                     }
@@ -233,7 +235,7 @@ class CameraScreenViewModel @Inject constructor(
         val bitmapCopy = bitmap.copy(bitmap.config!!, true) ?: return
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                appRepository.insertPhoto(categoryId, bitmap)
+                photoRepository.insert(categoryId, bitmap)
             } finally {
                 // Safely recycle the copy after saving (if not already recycled)
                 if (!bitmapCopy.isRecycled) {

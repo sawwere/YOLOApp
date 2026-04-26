@@ -2,11 +2,12 @@ package com.sawwere.yoloapp.ui.category.list
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.sawwere.yoloapp.core.domain.repository.AppRepository
+import com.sawwere.yoloapp.core.domain.category.usecase.DeleteCategory
+import com.sawwere.yoloapp.core.domain.category.usecase.GetAllCategories
+import com.sawwere.yoloapp.core.domain.category.usecase.InsertCategory
 import com.sawwere.yoloapp.ui.category.list.model.CategoryWithCount
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,7 +16,9 @@ import javax.inject.Inject
 
 @HiltViewModel
 class CategoriesListViewModel @Inject constructor(
-    private val repository: AppRepository
+    private val getAllCategories: GetAllCategories,
+    private val insertCategory: InsertCategory,
+    private val deleteCategory: DeleteCategory,
 ) : ViewModel() {
 
     private val _categoriesWithCount = MutableStateFlow<List<CategoryWithCount>>(emptyList())
@@ -26,27 +29,27 @@ class CategoriesListViewModel @Inject constructor(
     }
 
     internal fun loadCategoriesWithCount() {
-        viewModelScope.launch {
-            repository.getAllCategories().collect { categories ->
-                val counts = categories.map { category ->
-                    async { category.id to repository.getPhotoCountInCategory(category.id) }
-                }.awaitAll().toMap()
-                _categoriesWithCount.value = categories.map { category ->
-                    CategoryWithCount(category, counts[category.id] ?: 0)
-                }
+        viewModelScope.launch(Dispatchers.IO) {
+            val categoriesWithPhotos = getAllCategories.getAllCategories()
+            val categoriesWithCount = categoriesWithPhotos.map { categoryWithPhotos ->
+                CategoryWithCount(
+                    category = categoryWithPhotos.category,
+                    photoCount = categoryWithPhotos.photos.size
+                )
             }
+            _categoriesWithCount.value = categoriesWithCount
         }
     }
 
     fun addCategory(name: String) {
         viewModelScope.launch {
-            repository.insertCategory(name)
+            insertCategory.insert(name)
         }
     }
 
     fun deleteCategory(categoryId: Long) {
         viewModelScope.launch {
-            repository.deleteCategory(categoryId)
+            deleteCategory.deleteCategory(categoryId)
         }
     }
 }
