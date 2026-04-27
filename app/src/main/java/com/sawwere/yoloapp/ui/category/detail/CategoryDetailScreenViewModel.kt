@@ -5,8 +5,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.sawwere.yoloapp.core.data.entity.CategoryWithPhotos
+import com.sawwere.yoloapp.core.domain.category.usecase.GetCategory
 import com.sawwere.yoloapp.core.domain.photo.PhotoRepository
-import com.sawwere.yoloapp.core.domain.category.CategoryRepository
 import com.sawwere.yoloapp.ui.category.detail.navigation.CATEGORY_ID_ARG
 import com.sawwere.yoloapp.ui.category.detail.usecase.RecalculateChecksum
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,14 +30,15 @@ sealed class RecalculateState {
 
 data class CategoryDetailScreenUIState(
     val isFabMenuExpanded:Boolean = false,
-    val recalculateState: RecalculateState = RecalculateState.Idle
+    val recalculateState: RecalculateState = RecalculateState.Idle,
+    val errorMessage: String? = null
 )
 
 @HiltViewModel
 class CategoryDetailScreenViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: PhotoRepository,
-    private val categoryRepository: CategoryRepository,
+    private val getCategory: GetCategory,
     private val recalculateChecksum: RecalculateChecksum
 ) : ViewModel() {
     private val categoryId: Long = savedStateHandle[CATEGORY_ID_ARG]
@@ -55,9 +56,10 @@ class CategoryDetailScreenViewModel @Inject constructor(
     val uiState: StateFlow<CategoryDetailScreenUIState> = _uiState.asStateFlow()
 
     private fun loadCategoryWithPhotos() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val data = categoryRepository.getCategoryWithPhotos(categoryId)
-            _categoryWithPhotos.value = data
+        viewModelScope.launch {
+            getCategory.getCategoryWithPhotos(categoryId).collect { data ->
+                _categoryWithPhotos.value = data
+            }
         }
     }
 
@@ -71,18 +73,30 @@ class CategoryDetailScreenViewModel @Inject constructor(
 
     fun deletePhoto(photoId: Long) {
         viewModelScope.launch {
-            val success = repository.delete(photoId)
-            if (success) {
-                loadCategoryWithPhotos()
+            viewModelScope.launch {
+                val success = repository.delete(photoId)
+                if (!success) {
+                    showError("Не удалось удалить фото")
+                }
             }
         }
     }
 
     fun addPhoto(photoUri: Uri) {
         viewModelScope.launch {
-            val result = addPhotoFromUri(photoUri)
-            loadCategoryWithPhotos()
+            val success = addPhotoFromUri(photoUri)
+            if (!success) {
+                showError("Не удалось добавить фото")
+            }
         }
+    }
+
+    private fun showError(message: String) {
+        _uiState.update { it.copy(errorMessage = message) }
+    }
+
+    fun clearError() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
 
     private suspend fun addPhotoFromUri(uri: Uri): Boolean {

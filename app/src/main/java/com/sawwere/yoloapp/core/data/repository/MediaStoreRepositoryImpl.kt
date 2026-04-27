@@ -12,11 +12,8 @@ import com.sawwere.yoloapp.core.domain.repository.MediaStoreRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
 import java.io.InputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import java.util.UUID
 import javax.inject.Inject
 
 class MediaStoreRepositoryImpl @Inject constructor(
@@ -29,7 +26,6 @@ class MediaStoreRepositoryImpl @Inject constructor(
         private const val IMAGE_QUALITY = 85
         private const val MAX_IMAGE_WIDTH = 1920
         private const val MAX_IMAGE_HEIGHT = 1080
-        private const val THUMBNAIL_SIZE = 400
     }
 
     /**
@@ -239,8 +235,9 @@ class MediaStoreRepositoryImpl @Inject constructor(
 
     // Вспомогательные методы
     private fun generateFileName(): String {
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        return "IMG_${timestamp}"
+        val timestamp = System.currentTimeMillis()
+        val uniqueId = UUID.randomUUID().toString().take(8)
+        return "IMG_${timestamp}_${uniqueId}"
     }
 
     private fun sanitizeCategoryName(categoryName: String): String {
@@ -267,22 +264,6 @@ class MediaStoreRepositoryImpl @Inject constructor(
         val newHeight = (originalHeight * ratio).toInt()
 
         Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
-    }
-
-    private fun createThumbnail(bitmap: Bitmap, targetSize: Int): Bitmap {
-        val width = bitmap.width
-        val height = bitmap.height
-
-        // Рассчитываем размеры для сохранения пропорций
-        val scaleFactor = minOf(
-            targetSize.toFloat() / width,
-            targetSize.toFloat() / height
-        )
-
-        val newWidth = (width * scaleFactor).toInt()
-        val newHeight = (height * scaleFactor).toInt()
-
-        return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
     }
 
     /**

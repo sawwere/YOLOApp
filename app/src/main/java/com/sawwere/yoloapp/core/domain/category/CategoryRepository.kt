@@ -11,7 +11,7 @@ interface CategoryRepository {
 
     fun getAllCategories(): Flow<List<Category>>
 
-    suspend fun getCategoryWithPhotos(categoryId: Long): CategoryWithPhotos?
+    suspend fun getCategoryWithPhotos(categoryId: Long): Flow<CategoryWithPhotos?>
 
     suspend fun getCategoryById(categoryId: Long): Category?
 

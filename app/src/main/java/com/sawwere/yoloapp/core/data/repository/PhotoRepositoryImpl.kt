@@ -2,6 +2,7 @@ package com.sawwere.yoloapp.core.data.repository
 
 import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Log
 import androidx.core.net.toFile
 import com.sawwere.yoloapp.core.data.dao.PhotoDao
 import com.sawwere.yoloapp.core.data.entity.Photo
@@ -39,6 +40,7 @@ class PhotoRepositoryImpl @Inject constructor(
                     categoryName = category.name,
                     description = description
                 ) ?: return@withContext Result.failure(Exception("Failed to save image"))
+                Log.d(TAG, "Saved image to $imageUri")
 
                 val photo = Photo(
                     imageUri = imageUri.toString(),
@@ -96,5 +98,9 @@ class PhotoRepositoryImpl @Inject constructor(
         return withContext(Dispatchers.IO) {
             photoDao.markAllPhotosAsProcessed(categoryId)
         }
+    }
+
+    companion object {
+        private const val TAG = "PhotoRepositoryImpl"
     }
 }

@@ -29,7 +29,7 @@ interface CategoryDao {
 
     @Transaction
     @Query("SELECT * FROM categories WHERE id = :categoryId")
-    fun getCategoryWithPhotos(categoryId: Long): CategoryWithPhotos?
+    fun getCategoryWithPhotos(categoryId: Long): Flow<CategoryWithPhotos?>
 
     @Query("SELECT COUNT(*) FROM photos WHERE category_id = :categoryId")
     fun getPhotoCountInCategory(categoryId: Long): Int

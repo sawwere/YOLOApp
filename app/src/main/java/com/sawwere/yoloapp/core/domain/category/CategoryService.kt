@@ -10,7 +10,9 @@ import com.sawwere.yoloapp.core.domain.category.usecase.InsertCategory
 import com.sawwere.yoloapp.core.domain.category.usecase.UpdateCategory
 import com.sawwere.yoloapp.core.domain.photo.PhotoService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 
 class CategoryService(
@@ -49,7 +51,7 @@ class CategoryService(
     override suspend fun getAllCategories(): List<CategoryWithPhotos> = withContext(Dispatchers.IO) {
         val categories = categoryRepository.getAllCategories().first()
         categories.mapNotNull { category ->
-            categoryRepository.getCategoryWithPhotos(category.id)
+            categoryRepository.getCategoryWithPhotos(category.id).firstOrNull()
         }
     }
 
@@ -61,7 +63,7 @@ class CategoryService(
         return categoryRepository.updateCategory(category)
     }
 
-    override suspend fun getCategoryWithPhotos(cateryId: Long): CategoryWithPhotos? {
+    override suspend fun getCategoryWithPhotos(cateryId: Long): Flow<CategoryWithPhotos?> {
         return categoryRepository.getCategoryWithPhotos(cateryId)
     }
 }

@@ -28,7 +28,7 @@ class CategoryRepositoryImpl @Inject constructor(
 
     override fun getAllCategories(): Flow<List<Category>> = categoryDao.getAllCategories()
 
-    override suspend fun getCategoryWithPhotos(categoryId: Long): CategoryWithPhotos? =
+    override suspend fun getCategoryWithPhotos(categoryId: Long): Flow<CategoryWithPhotos?> =
         categoryDao.getCategoryWithPhotos(categoryId)
 
     override suspend fun deleteCategory(categoryId: Long) {
