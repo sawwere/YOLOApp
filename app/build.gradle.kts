@@ -19,15 +19,20 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("boolean", "ENCRYPT_DATABASE", "false")
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "ENCRYPT_DATABASE", "false")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            buildConfigField("boolean", "ENCRYPT_DATABASE", "true")
         }
     }
     compileOptions {
@@ -91,4 +96,9 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
+
+    implementation("net.zetetic:android-database-sqlcipher:4.5.3")
+    implementation("com.commonsware.cwac:saferoom:1.2.1")
+    implementation("androidx.security:security-crypto:1.0.0")
+
 }
