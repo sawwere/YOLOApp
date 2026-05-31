@@ -37,6 +37,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+data class ValidationDisplayItem(
+    val index: Int,
+    val confidence: Float,
+    val type: ValidateObject.ValidationResult,
+    val distance: Float
+)
+
 data class CameraScreenUIState(
     val preProcessTime: Long = 0L,
     val inferenceTime: Long = 0L,
@@ -44,7 +51,8 @@ data class CameraScreenUIState(
     val debugMode: Boolean = false,
     val zoomProgress: Float = 0f,
     val drawMode: String = CameraScreenMode.ADD.value,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val validationResults: List<ValidationDisplayItem> = emptyList()
 )
 
 @HiltViewModel
@@ -343,13 +351,22 @@ class CameraScreenViewModel @Inject constructor(
             detectionResults = results
         )
         if (drawMode == CameraScreenMode.CHECK.value) {
+            val displayItems = mutableListOf<ValidationDisplayItem>()
             val processedDetections = processCapturedSegments(
                 originalBitmap = originalBitmap,
                 detectionBoxes = results
             )
             for ((index, detection) in processedDetections.withIndex()) {
-                val res = validateObject(detection, category)
-                results[index].classId = when(res) {
+                val res : ValidateObject.ValidationResult = validateObject(detection, category)
+                displayItems.add(
+                    ValidationDisplayItem(
+                        index = index + 1,  // нумерация с 1
+                        confidence = res.confidence,
+                        type = res,
+                        distance = res.distance
+                    )
+                )
+                results[index].classId = when (res) {
                     is ValidateObject.ValidationResult.Genuine -> 0
                     is ValidateObject.ValidationResult.Forgery -> 1
                     is ValidateObject.ValidationResult.None -> 2
@@ -359,6 +376,7 @@ class CameraScreenViewModel @Inject constructor(
                     "index=$index, confidence=${res.confidence}, distance=${res.distance}"
                 )
             }
+            _uiState.update { it.copy(validationResults = displayItems) }
         }
 
         segmentedBitmap = if (results.isEmpty()) {

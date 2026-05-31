@@ -45,4 +45,7 @@
     <string name="ui_common_error">Error</string>
     <string name="camera_screen_objects_found_label">Found objects (%1$s)</string>
     <string name="capture_error">Photo capture failed</string>
+    <string name="genuine">Genuine</string>
+    <string name="forgery">Forgery</string>
+    <string name="none">None</string>
 </resources>

@@ -65,7 +65,7 @@ class DrawImages(private val context: Context) {
         val canvas = Canvas(combined)
 
 
-        results.forEach { detection ->
+        for ((index, detection) in results.withIndex()) {
             val colorRes = boxColors[detection.classId % boxColors.size]
             val color = ContextCompat.getColor(context, colorRes)
 
@@ -73,27 +73,21 @@ class DrawImages(private val context: Context) {
             boxFillPaint.color = color
             textBackgroundPaint.color = color
 
-            if (drawOverlay) {
-                canvas.drawRect(detection.bbox, boxFillPaint)
-            }
-
-            canvas.drawRect(detection.bbox, boxStrokePaint)
 
             val text = "(${String.format("%.2f", detection.confidence)})"
             val textBounds = Rect()
             labelPaint.getTextBounds(text, 0, text.length, textBounds)
 
             val textX = detection.bbox.left
-            val textY = detection.bbox.top - textBounds.height() - 4
+            val textY = detection.bbox.top
 
-            val backgroundRect = RectF(
-                textX - 4f,
-                textY - textBounds.height() - 4f,
-                textX + textBounds.width() + 8f,
-                textY + 4f
-            )
-            canvas.drawRoundRect(backgroundRect, 4f, 4f, textBackgroundPaint)
-            canvas.drawText(text, textX, textY, labelPaint)
+            if (drawOverlay) {
+                canvas.drawRect(detection.bbox, boxFillPaint)
+
+                canvas.drawText((index + 1).toString(), textX, textY, labelPaint)
+            }
+
+            canvas.drawRect(detection.bbox, boxStrokePaint)
         }
 
         return combined

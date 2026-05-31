@@ -22,6 +22,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -34,6 +37,8 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -56,6 +61,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -65,6 +72,7 @@ import com.sawwere.yoloapp.core.system.VibrationComponent
 import com.sawwere.yoloapp.ui.camera.component.ShutterButton
 import com.sawwere.yoloapp.ui.camera.component.SpeedInfoPanel
 import com.sawwere.yoloapp.ui.camera.navigation.CameraScreenMode
+import com.sawwere.yoloapp.ui.camera.usecase.ValidateObject
 import kotlinx.coroutines.flow.map
 
 
@@ -144,7 +152,7 @@ fun CameraScreen(
     ) {
         Box(
             modifier = Modifier
-                .weight(1f)
+
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp)
                 .pointerInput(Unit) {
@@ -476,12 +484,87 @@ fun CameraScreen(
             }
         }
 
+        if (uiState.drawMode == CameraScreenMode.CHECK.value) {
+            // Список результатов проверки
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Результаты проверки",
+                        color = Color.White,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    if (uiState.validationResults.isEmpty()) {
+                        Text(
+                            text = "Объекты не обнаружены",
+                            color = Color.Gray,
+                            fontSize = 14.sp
+                        )
+                    } else {
+                        LazyColumn {
+                            items(uiState.validationResults) { item ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${item.index}.",
+                                        color = Color.White,
+                                        fontSize = 14.sp,
+                                        modifier = Modifier.width(24.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = when(item.type) {
+                                                is ValidateObject.ValidationResult.Genuine -> stringResource(R.string.genuine)
+                                                is ValidateObject.ValidationResult.Forgery -> stringResource(R.string.forgery)
+                                                is ValidateObject.ValidationResult.None -> stringResource(R.string.none)
+                                            },
+                                            color = when (item.type) {
+                                                is ValidateObject.ValidationResult.Genuine -> Color(0xFF4CAF50)
+                                                is ValidateObject.ValidationResult.Forgery -> Color(0xFFF44336)
+                                                else -> Color.Gray
+                                            },
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = "Отличие от эталона: ${(item.distance).format(3)} при пороге = 0.3",
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            fontSize = 12.sp
+                                        )
+                                    }
+                                    Text(
+                                        text = "Уверенность детекции: ${"%.2f".format(item.confidence)}",
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier
+                                            .width(100.dp)
+                                            .wrapContentWidth(Alignment.End),
+                                        textAlign = TextAlign.End,
+                                        fontSize = 11.sp
+                                    )
+
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier
             .height(WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
         )
     }
 }
-
-
 
 fun Float.format(digits: Int) = "%.${digits}f".format(this)
